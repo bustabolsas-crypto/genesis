@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0a14">
+  <title>Génesis</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Tres familias: Orbitron (titulares cósmicos), Space Mono (números HUD),
+       Inter (texto secundario). -->
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700;800;900&family=Space+Mono:wght@400;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Splash de carga: aparece antes de que el juego pinte y se desvanece a los ~2s. -->
+  <div class="boot-screen" id="boot-screen" aria-hidden="true">
+    <h1 class="boot-title">GÉNESIS</h1>
+    <p class="boot-tagline">Un punto de luz</p>
+  </div>
+  <!-- Barra superior: era actual, energía total, energía por segundo -->
+  <header class="topbar">
+    <div class="stat era">
+      <span class="stat-label">Era</span>
+      <span class="stat-value" id="era-name">Vacío</span>
+    </div>
+
+    <div class="stat energy">
+      <span class="stat-value energy-value" id="energy-value">0</span>
+      <span class="stat-label">Energía</span>
+    </div>
+
+    <div class="stat rate">
+      <span class="stat-value" id="rate-value">0</span>
+      <span class="stat-label">E/seg</span>
+    </div>
+
+    <!-- Barra de progreso a la siguiente era -->
+    <div class="progress" aria-label="Progreso a la siguiente era">
+      <div class="progress-fill" id="progress-fill"></div>
+    </div>
+  </header>
+
+  <!-- Escenario central: aquí vive el canvas con la entidad evolutiva -->
+  <main class="stage">
+    <canvas id="canvas" aria-label="Entidad evolutiva, click para generar energía"></canvas>
+    <div class="hint" id="hint">Haz click en la luz</div>
+
+    <!-- Indicador del multiplicador de CU (visible cuando hay CU) -->
+    <div class="cu-badge" id="cu-badge" hidden>
+      <span class="cu-badge-label">×</span>
+      <span class="cu-badge-value" id="cu-badge-value">1.00</span>
+      <span class="cu-badge-hint">CU</span>
+    </div>
+  </main>
+
+  <!-- Panel de mejoras y generadores (las mejoras de click se añaden arriba) -->
+  <aside class="generators">
+    <h2 class="panel-title">Mejoras de click</h2>
+    <div class="upgrades-list" id="upgrades-list">
+      <p class="empty">Aparecen al desbloquear nuevas eras.</p>
+    </div>
+
+    <h2 class="panel-title">Generadores</h2>
+    <div class="generators-list" id="generators-list">
+      <p class="empty">Aún no hay generadores. Sigue haciendo click.</p>
+    </div>
+  </aside>
+
+  <!-- Barra inferior: ajustes y guardado -->
+  <footer class="bottombar">
+    <button class="btn btn-icon" id="btn-settings" type="button" aria-label="Ajustes">⚙</button>
+    <button class="btn" id="btn-save" type="button">Guardar</button>
+  </footer>
+
+  <!-- Botón flotante de Big Bang. Se muestra al alcanzar la era Universo. -->
+  <button class="btn-bigbang" id="btn-bigbang" type="button" hidden>
+    <span class="bigbang-icon">✦</span>
+    <span class="bigbang-label">BIG BANG</span>
+  </button>
+
+  <!-- Overlays de transición de era -->
+  <div class="era-flash" id="era-flash" aria-hidden="true"></div>
+  <div class="era-notification" id="era-notification" aria-live="polite">
+    <span class="era-notification-pre">Nueva era</span>
+    <span class="era-notification-name" id="era-notification-name"></span>
+  </div>
+
+  <!-- Modal genérico reutilizable: prestige, offline, settings, confirmaciones -->
+  <div class="modal-overlay" id="modal-overlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <h2 class="modal-title" id="modal-title"></h2>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-actions" id="modal-actions"></div>
+    </div>
+  </div>
+
+  <!-- Contenedor del tooltip del tutorial. Se posiciona vía JS. -->
+  <div class="tooltip" id="tooltip" hidden>
+    <p class="tooltip-text" id="tooltip-text"></p>
+    <button class="btn tooltip-btn" id="tooltip-btn" type="button">Entendido</button>
+    <span class="tooltip-arrow" id="tooltip-arrow"></span>
+  </div>
+
+  <!-- Orden de carga: utilidades, módulos de juego, motor al final -->
+  <script src="js/save.js"></script>
+  <script src="js/stages.js"></script>
+  <script src="js/balance.js"></script>
+  <script src="js/visuals.js"></script>
+  <script src="js/prestige.js"></script>
+  <script src="js/tutorial.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>
