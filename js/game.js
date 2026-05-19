@@ -20,12 +20,15 @@ function createInitialState() {
     energy: 0,
     baseClick: 1,            // suma de los flat-adds de mejoras de click
     clickMultiplier: 1,      // producto de los multipliers de mejoras de click
+    powerClickMult: 1,       // reservado para futuro upgrade "Power Click"
     eps: 0,
     eraIndex: 0,
     generators: {},          // { quark: 5, electron: 2, ... }
     upgrades: {},            // { resonancia: true, espin: true, ... }
     runEnergyEarned: 0,      // E total ganada en este run (base del cálculo de CU)
     runStartTime: Date.now(),
+    activeBuffs: {},         // { id: { endsAtMs, mult, name } }
+    buffCooldowns: {},       // { id: cooldownEndsAtMs }
 
     // -------- Persistente (atraviesa Big Bangs) --------
     cu: 0,                   // Constantes Universales acumuladas
@@ -124,12 +127,12 @@ const Game = {
         OFFLINE_CAP_SECONDS,
         (Date.now() - this.state.lastSaved) / 1000
       ));
-      // Calculamos eps con el estado cargado para estimar lo ganado.
+      // 50% de eficiencia offline: penalización por no estar jugando activamente.
       const eps = this.calculateEps();
-      const offlineEnergy = eps * elapsedSec;
-      // Sólo mostramos modal si vale la pena (>= 30s y >0 ganado).
-      if (elapsedSec >= 30 && offlineEnergy > 0) {
-        this.pendingOffline = { energy: offlineEnergy, seconds: elapsedSec };
+      const offlineEnergy = eps * elapsedSec * 0.5;
+      // Modal sólo si estuvo > 1 minuto fuera y hay algo que recoger.
+      if (elapsedSec >= 60 && offlineEnergy > 0) {
+        this.pendingOffline = { energy: offlineEnergy, seconds: elapsedSec, efficiency: 50 };
       }
     }
 
@@ -196,9 +199,29 @@ const Game = {
     this.state.totalEnergyEarned += amount;
   },
 
-  // Valor que suma cada click (afectado por upgrades, NO por CU).
+  // Valor que suma cada click.
+  // - eraBase: escala ×5 por era (Era0=1, Era1=5, Era2=25, ...).
+  // - baseClick-1: bonus flat de upgrades (baseClick arranca en 1).
+  // - clickMultiplier: bonus multiplicativo de upgrades.
+  // - powerClickMult: reservado para futuro upgrade "Power Click".
+  // - buff: multiplicador de power-ups activos.
   computeClickValue() {
-    return this.state.baseClick * this.state.clickMultiplier;
+    const eraBase = Math.pow(5, this.state.eraIndex);
+    const base = (eraBase + (this.state.baseClick - 1)) * this.state.clickMultiplier;
+    return base * (this.state.powerClickMult || 1) * this.getBuffMultiplier();
+  },
+
+  // Multiplicador combinado de todos los buffs activos no expirados.
+  getBuffMultiplier() {
+    const now = Date.now();
+    let mult = 1;
+    const buffs = this.state.activeBuffs;
+    if (buffs) {
+      for (const id in buffs) {
+        if (buffs[id].endsAtMs > now) mult *= buffs[id].mult;
+      }
+    }
+    return mult;
   },
 
   // Click manual sobre la entidad central. (clientX/Y opcional, se usa
@@ -238,6 +261,30 @@ const Game = {
     return true;
   },
 
+  // Definiciones de power-ups disponibles (arquitectura extensible).
+  POWER_UP_DEFS: {
+    energyX2: {
+      name: 'Energía ×2',
+      mult: 2,
+      durationMs: 5 * 60 * 1000,    // 5 minutos activo
+      cooldownMs: 30 * 60 * 1000,   // 30 minutos de cooldown desde activación
+    },
+  },
+
+  // Activa un power-up si no está en cooldown. Devuelve true si tuvo éxito.
+  activatePowerUp(id) {
+    const def = this.POWER_UP_DEFS[id];
+    if (!def) return false;
+    const now = Date.now();
+    if (!this.state.buffCooldowns) this.state.buffCooldowns = {};
+    if (!this.state.activeBuffs)   this.state.activeBuffs = {};
+    const cooldownEnds = this.state.buffCooldowns[id] || 0;
+    if (now < cooldownEnds) return false;
+    this.state.activeBuffs[id] = { endsAtMs: now + def.durationMs, mult: def.mult, name: def.name };
+    this.state.buffCooldowns[id] = now + def.cooldownMs;
+    return true;
+  },
+
   // Recoger lo generado offline (lo dispara el botón del modal).
   collectOffline(amount) {
     this.addEnergy(amount);
@@ -270,9 +317,24 @@ const Game = {
     this.state.eps = eps;
     if (eps > 0) this.addEnergy(eps * dt);
     this.checkEraUnlock();
+    this.tickBuffs();
   },
 
-  // Suma la producción de todos los generadores × multiplicador de prestige.
+  // Expira buffs cuyo tiempo terminó y notifica al usuario.
+  tickBuffs() {
+    const now = Date.now();
+    const buffs = this.state.activeBuffs;
+    if (!buffs) return;
+    for (const id in buffs) {
+      if (buffs[id].endsAtMs <= now) {
+        const name = buffs[id].name;
+        delete buffs[id];
+        UI.showBuffExpiredNotification(name);
+      }
+    }
+  },
+
+  // Suma la producción de todos los generadores × prestige × buffs activos.
   calculateEps() {
     let total = 0;
     for (const stage of STAGES) {
@@ -281,7 +343,7 @@ const Game = {
         total += owned * gen.baseProduction;
       }
     }
-    return total * Prestige.multiplier();
+    return total * Prestige.multiplier() * this.getBuffMultiplier();
   },
 
   // Avanza la era cuando se cruza el umbral. while por si una sola

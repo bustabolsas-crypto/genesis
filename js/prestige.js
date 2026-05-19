@@ -9,8 +9,8 @@
    siempre, así que cada Big Bang acelera el siguiente run.
 
    Fórmulas:
-     CU_ganadas  = floor(sqrt(runEnergyEarned / 1e10))
-     multiplier  = 1 + cu_total × 0.05
+     CU_ganadas  = floor(sqrt(runEnergyEarned / 1e12))
+     multiplier  = 1 + cu_total × 0.5   (1 CU=×1.5, 10=×6, 100=×51)
 
    La función Prestige.multiplier() la consume Game.calculateEps().
    ============================================ */
@@ -21,17 +21,17 @@ const Prestige = {
     return Game.state.eraIndex >= 11;
   },
 
-  // Cuántas CU otorga el run actual según la E ganada en este run.
+  // CU ganadas = floor(sqrt(runEnergy / 1e12)).
+  // Requiere 1 billón de energía para la primera CU; cada ×100 de energía = ×10 CU.
   computeCUGained() {
     const e = Game.state.runEnergyEarned;
-    if (e < 1e10) return 0;
-    // Math.sqrt mantiene la curva manejable a números muy grandes (1e54 → ~6e21 CU).
-    return Math.floor(Math.sqrt(e / 1e10));
+    if (e < 1e12) return 0;
+    return Math.floor(Math.sqrt(e / 1e12));
   },
 
-  // Multiplicador permanente que se aplica a la producción de generadores.
+  // Multiplicador permanente: 1 CU = ×1.5, 10 CU = ×6, 100 CU = ×51.
   multiplier() {
-    return 1 + (Game.state.cu || 0) * 0.05;
+    return 1 + (Game.state.cu || 0) * 0.5;
   },
 
   // Modal de confirmación previo al Big Bang. Resume el run y muestra
@@ -42,7 +42,7 @@ const Prestige = {
     const state = Game.state;
     const cuGained = this.computeCUGained();
     const newCU = state.cu + cuGained;
-    const newMult = 1 + newCU * 0.05;
+    const newMult = 1 + newCU * 0.5;
     const runSeconds = (Date.now() - state.runStartTime) / 1000;
 
     const body = document.createElement('div');
@@ -55,12 +55,12 @@ const Prestige = {
       <dl class="kv">
         <dt>Energía del run</dt><dd>${formatNumber(state.runEnergyEarned)}</dd>
         <dt>Tiempo del run</dt><dd>${formatTime(runSeconds)}</dd>
-        <dt>CU a ganar</dt><dd class="hilite">+${formatNumber(cuGained)}</dd>
-        <dt>Total de CU</dt><dd>${formatNumber(newCU)}</dd>
-        <dt>Multiplicador</dt><dd class="hilite">×${formatNumber(newMult)}</dd>
+        <dt>CU a ganar este run</dt><dd class="hilite">+${formatNumber(cuGained)}</dd>
+        <dt>CU total después</dt><dd>${formatNumber(newCU)}</dd>
+        <dt>Multiplicador resultante</dt><dd class="hilite">×${formatNumber(newMult)}</dd>
       </dl>
       ${cuGained === 0
-        ? '<p class="warn">No vas a ganar ninguna CU con este run. Probablemente convenga seguir un poco.</p>'
+        ? `<p class="warn">Necesitás 1 billón de energía para ganar CU (tenés ${formatNumber(state.runEnergyEarned)}). Conviene seguir jugando.</p>`
         : ''}
     `;
 
@@ -89,8 +89,11 @@ const Prestige = {
     state.upgrades = {};         // las mejoras de click se re-compran cada run
     state.baseClick = 1;
     state.clickMultiplier = 1;
+    state.powerClickMult = 1;
     state.runEnergyEarned = 0;
     state.runStartTime = Date.now();
+    state.activeBuffs = {};
+    state.buffCooldowns = {};
 
     // Forzar a UI a reconstruir los paneles desde cero.
     UI.generatorEls = {};

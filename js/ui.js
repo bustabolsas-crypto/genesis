@@ -116,6 +116,14 @@ const UI = {
     this.els.btnBigbang.addEventListener('click', () => {
       Prestige.showModal();
     });
+
+    this.els.btnBoost = document.getElementById('btn-boost');
+    if (this.els.btnBoost) {
+      this.els.btnBoost.addEventListener('click', () => {
+        const ok = Game.activatePowerUp('energyX2');
+        if (!ok) this.flash(this.els.btnBoost, 'Recargando...', 1200);
+      });
+    }
   },
 
   // Llamado cada frame con el estado actual.
@@ -179,8 +187,44 @@ const UI = {
     this.refreshGenerators(state);
     this.refreshUpgrades(state);
 
+    // ----- Power-ups activos -----
+    this.updateBuffDisplay(state);
+
     // ----- Tutorial -----
     Tutorial.check(state);
+  },
+
+  // Actualiza el botón de boost y el glow de fondo según el estado de buffs.
+  updateBuffDisplay(state) {
+    const btn = this.els.btnBoost;
+    if (!btn) return;
+    const now = Date.now();
+    const activeBuff   = state.activeBuffs   && state.activeBuffs['energyX2'];
+    const cooldownEnds = state.buffCooldowns && state.buffCooldowns['energyX2'];
+
+    if (activeBuff && activeBuff.endsAtMs > now) {
+      const remaining = Math.ceil((activeBuff.endsAtMs - now) / 1000);
+      btn.textContent = '⚡ ' + formatTime(remaining);
+      btn.classList.add('buff-on');
+      btn.disabled = true;
+      document.body.classList.add('buff-active');
+    } else if (cooldownEnds && cooldownEnds > now) {
+      const remaining = Math.ceil((cooldownEnds - now) / 1000);
+      btn.textContent = '⚡×2 (' + formatTime(remaining) + ')';
+      btn.classList.remove('buff-on');
+      btn.disabled = true;
+      document.body.classList.remove('buff-active');
+    } else {
+      btn.textContent = '⚡ Energía ×2';
+      btn.classList.remove('buff-on');
+      btn.disabled = false;
+      document.body.classList.remove('buff-active');
+    }
+  },
+
+  // Notificación de boost expirado (reutiliza el mismo sistema de era-notification).
+  showBuffExpiredNotification(name) {
+    this.showEraNotification(name + ' terminado');
   },
 
   // Construye/actualiza las tarjetas de generadores. Sólo añade las que faltan.
@@ -362,16 +406,17 @@ const UI = {
   },
 
   // ----------- Modal de bienvenida con la energía ganada offline -----------
-  showOfflineModal({ energy, seconds }) {
+  showOfflineModal({ energy, seconds, efficiency }) {
+    const effStr = efficiency != null ? efficiency + '% de eficiencia' : '50% de eficiencia';
     Modal.show({
       title: '¡Bienvenido de vuelta!',
       body: `
         <p>Mientras no estabas, tu universo siguió creciendo.</p>
         <p class="big-stat">+${formatNumber(energy)} <span class="dim">Energía</span></p>
-        <p class="dim">Estuviste ausente ${formatTime(seconds)} (cap de 4 horas).</p>
+        <p class="dim">Estuviste ausente ${formatTime(seconds)} · ${effStr}</p>
       `,
       buttons: [
-        { label: 'Recoger', primary: true, onClick: () => Game.collectOffline(energy) },
+        { label: 'Reclamar', primary: true, onClick: () => Game.collectOffline(energy) },
       ],
       dismissible: false,
     });

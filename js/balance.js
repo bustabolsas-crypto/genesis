@@ -21,30 +21,28 @@ const Balance = {
     return h === 'localhost' || h === '127.0.0.1' || h === '';
   },
 
-  // Pacing objetivo en segundos por transición (era N → N+1).
-  // Tomado del enunciado: V→P 30s, P→A 2-3min, ..., G→U 2-3h.
-  // Usamos el punto medio del rango como objetivo.
+  // Pacing objetivo en segundos por transición (primer run sin CU).
+  // Rango dado → midpoint: V→P 30s, P→A 2.5min, ..., G→U 10h.
+  // Total proyectado: ~27.7h (dentro del objetivo 25-40h).
   TARGETS: [
-    30,      // 0→1   Vacío → Partícula
-    150,     // 1→2   Partícula → Átomo (2.5 min)
-    270,     // 2→3   Átomo → Molécula (4.5 min)
-    420,     // 3→4   Molécula → Célula (7 min)
-    660,     // 4→5   Célula → Organismo (11 min)
-    990,     // 5→6   Organismo → Especie (16.5 min)
-    1350,    // 6→7   Especie → Civilización (22.5 min)
-    2100,    // 7→8   Civilización → Planeta (35 min)
-    3150,    // 8→9   Planeta → Sistema Solar (52.5 min)
-    6300,    // 9→10  Sistema Solar → Galaxia (1h45m)
-    9000,    // 10→11 Galaxia → Universo (2h30m)
+    30,       // 0→1   Vacío → Partícula        (30s)
+    150,      // 1→2   Partícula → Átomo         (2.5 min)
+    390,      // 2→3   Átomo → Molécula          (6.5 min,  rango 5-8)
+    810,      // 3→4   Molécula → Célula         (13.5 min, rango 12-15)
+    1650,     // 4→5   Célula → Organismo        (27.5 min, rango 25-30)
+    3150,     // 5→6   Organismo → Especie       (52.5 min, rango 45-60)
+    6300,     // 6→7   Especie → Civilización    (1h45m,    rango 1.5-2h)
+    9900,     // 7→8   Civilización → Planeta    (2h45m,    rango 2.5-3h)
+    16200,    // 8→9   Planeta → Sistema Solar   (4h30m,    rango 4-5h)
+    25200,    // 9→10  Sistema Solar → Galaxia   (7h,       rango 6-8h)
+    36000,    // 10→11 Galaxia → Universo        (10h,      rango 8-12h)
   ],
 
-  // Modelo del jugador. Estos números los podemos toquetear si la
-  // suposición no se siente realista.
+  // Modelo del jugador: click power escala ×5 por era (igual que en el juego).
   PLAYER: {
-    clickRateEra0:  1.5,   // clicks/seg mientras no hay producción auto
-    clickRateAfter: 0.2,   // clicks/seg ocasionales una vez que hay generadores
-    clickPower:     1,
-    multiplier:     1,     // sin CU para una primera partida limpia
+    clickRateEra0:  1.5,   // clicks/seg en era 0 (sin generadores)
+    clickRateAfter: 0.2,   // clicks/seg ocasionales con generadores activos
+    multiplier:     1,     // sin CU para primera partida limpia
   },
 
   // Simula desde el principio hasta la era 11 (Universo) y devuelve
@@ -57,7 +55,7 @@ const Balance = {
     let eraIdx = 0;
     let t = 0;
     const dt = 0.5;                  // paso de simulación (medio segundo)
-    const maxT = 24 * 3600;          // cap de 24h por seguridad
+    const maxT = 60 * 3600;          // cap de 60h (objetivo primer run ~27h)
     const eraTimes = [0];            // tiempo de desbloqueo de cada era
 
     while (eraIdx < STAGES.length - 1 && t < maxT) {
@@ -70,11 +68,12 @@ const Balance = {
       }
       eps *= P.multiplier;
 
-      // 2) Tasa de clicks (alta en era 0, baja después — clicks "ocasionales").
-      const clickRate = eraIdx === 0 ? P.clickRateEra0 : P.clickRateAfter;
+      // 2) Click power escala ×5 por era (igual que Game.computeClickValue).
+      const clickPower = Math.pow(5, eraIdx);
+      const clickRate  = eraIdx === 0 ? P.clickRateEra0 : P.clickRateAfter;
 
       // 3) Avance del tiempo y de la energía.
-      energy += (eps + clickRate * P.clickPower) * dt;
+      energy += (eps + clickRate * clickPower) * dt;
       t += dt;
 
       // 4) Subir de era si cruzamos el umbral. while por si saltamos varias.
