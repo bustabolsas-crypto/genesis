@@ -30,6 +30,13 @@ function createInitialState() {
     activeBuffs: {},         // { id: { endsAtMs, mult, name } }
     buffCooldowns: {},       // { id: cooldownEndsAtMs }
 
+    // -------- Combate --------
+    hp:                    100,
+    maxHp:                 100,
+    coins:                 0,
+    debilitatedUntil:      0,   // timestamp: EPS -10% hasta esta hora
+    debilitationCooldown:  0,   // timestamp: 2ª muerte antes de esto = penalización
+
     // -------- Persistente (atraviesa Big Bangs) --------
     cu: 0,                   // Constantes Universales acumuladas
     bigBangs: 0,
@@ -39,7 +46,10 @@ function createInitialState() {
 
     // -------- Settings & tutorial --------
     soundEnabled: false,
-    tutorialSeen: { intro: false, generator: false, era2: false },
+    tutorialSeen: {
+      intro: false, generator: false, era2: false,
+      firstEnemy: false, firstBoss: false, firstDebilitation: false,
+    },
 
     // -------- Save management --------
     lastSaved: 0,
@@ -69,7 +79,8 @@ const Game = {
       // Fusionar tutorialSeen y generators con sus defaults para que campos
       // nuevos no queden undefined si el save viene de una versión vieja.
       this.state.tutorialSeen = Object.assign(
-        { intro: false, generator: false, era2: false },
+        { intro: false, generator: false, era2: false,
+          firstEnemy: false, firstBoss: false, firstDebilitation: false },
         loaded.tutorialSeen || {}
       );
     }
@@ -111,11 +122,24 @@ const Game = {
     // runStartTime puede haberse perdido en saves viejos.
     if (!this.state.runStartTime) this.state.runStartTime = Date.now();
 
+    // Asegurar campos de combate si viene de un save viejo
+    if (typeof this.state.hp !== 'number' || !isFinite(this.state.hp)) {
+      this.state.maxHp = 100 + this.state.eraIndex * 50;
+      this.state.hp    = this.state.maxHp;
+    }
+    if (typeof this.state.maxHp !== 'number' || !isFinite(this.state.maxHp)) {
+      this.state.maxHp = 100 + this.state.eraIndex * 50;
+    }
+    if (typeof this.state.coins !== 'number') this.state.coins = 0;
+    if (typeof this.state.debilitatedUntil !== 'number') this.state.debilitatedUntil = 0;
+    if (typeof this.state.debilitationCooldown !== 'number') this.state.debilitationCooldown = 0;
+
     // Inicializar UI/visuales/tutorial.
     Modal.init();
     UI.init();
     Visuals.init();
     Tutorial.init();
+    Combat.init();
 
     // Restaurar la era visual al cargar, sin disparar la animación.
     Visuals.setEra(this.state.eraIndex, false);
@@ -175,10 +199,14 @@ const Game = {
       return;
     }
     this.state.eraIndex = n;
+    this.state.maxHp = 100 + n * 50;
+    this.state.hp    = this.state.maxHp;
     if (this.state.energy < STAGES[n].unlockAt) {
       this.state.energy = STAGES[n].unlockAt;
     }
     if (n > this.state.highestEra) this.state.highestEra = n;
+    Combat.reset();
+    Combat.bossSpawnCooldownUntil = performance.now() + 2000;
     Visuals.setEra(n, true);
     UI.showEraNotification(STAGES[n].name);
     UI.lastEraRendered = -1;
@@ -224,12 +252,14 @@ const Game = {
     return mult;
   },
 
-  // Click manual sobre la entidad central. (clientX/Y opcional, se usa
-  // para posicionar el "+X" flotante en coords del viewport).
+  // Click manual. Primero verifica si impacta a un enemigo; si sí, aplica
+  // daño de combate y no suma energía. Si no, comportamiento normal.
   click(x, y, clientX, clientY) {
+    this.state.totalClicks++;
+    if (Combat.handleClick(x, y, this.state)) return;
+
     const gain = this.computeClickValue();
     this.addEnergy(gain);
-    this.state.totalClicks++;
     Visuals.spawnClickParticle(x, y, gain);
     if (clientX !== undefined) UI.spawnFloatingText(clientX, clientY, gain);
     this.checkEraUnlock();
@@ -306,6 +336,8 @@ const Game = {
     // Visuals SIEMPRE avanza, así la transición/morph se ve durante la pausa.
     Visuals.update(dt);
     Visuals.render();
+    // Combat se dibuja encima de los visuales pero sólo fuera del Big Bang.
+    if (Visuals.bigBangT < 0) Combat.render(Visuals.ctx, Visuals.width, Visuals.height);
     UI.update(this.state);
 
     requestAnimationFrame(this.loop.bind(this));
@@ -318,6 +350,7 @@ const Game = {
     if (eps > 0) this.addEnergy(eps * dt);
     this.checkEraUnlock();
     this.tickBuffs();
+    Combat.tick(dt, this.state);
   },
 
   // Expira buffs cuyo tiempo terminó y notifica al usuario.
@@ -334,7 +367,7 @@ const Game = {
     }
   },
 
-  // Suma la producción de todos los generadores × prestige × buffs activos.
+  // Suma la producción de todos los generadores × prestige × buffs × debilitación.
   calculateEps() {
     let total = 0;
     for (const stage of STAGES) {
@@ -343,22 +376,40 @@ const Game = {
         total += owned * gen.baseProduction;
       }
     }
-    return total * Prestige.multiplier() * this.getBuffMultiplier();
+    return total * Prestige.multiplier() * this.getBuffMultiplier() * this.getDebilitationMult();
   },
 
-  // Avanza la era cuando se cruza el umbral. while por si una sola
-  // tick salta varias eras (puede pasar tras un Big Bang con mucho multiplicador).
+  // -10% EPS durante los 60s después de la primera debilitación
+  getDebilitationMult() {
+    const until = this.state.debilitatedUntil;
+    if (until && Date.now() < until) return 0.9;
+    return 1;
+  },
+
+  // Cuando la energía cruza el umbral de la siguiente era, aparece un jefe
+  // que hay que derrotar para avanzar. Reemplaza el avance automático.
   checkEraUnlock() {
-    while (true) {
-      const next = STAGES[this.state.eraIndex + 1];
-      if (!next) break;
-      if (this.state.energy < next.unlockAt) break;
-      this.state.eraIndex++;
-      if (this.state.eraIndex > this.state.highestEra) {
-        this.state.highestEra = this.state.eraIndex;
-      }
-      this.onEraUnlocked(this.state.eraIndex);
-    }
+    const next = STAGES[this.state.eraIndex + 1];
+    if (!next) return;
+    if (this.state.energy < next.unlockAt) return;
+    if (Combat.mode === 'boss') return;
+    if (performance.now() < Combat.bossSpawnCooldownUntil) return;
+    Combat.requestBossSpawn(this.state.eraIndex);
+  },
+
+  // Llamado por Combat cuando el jefe de la era muere
+  advanceEra() {
+    const idx = this.state.eraIndex + 1;
+    if (idx >= STAGES.length) return;
+    this.state.eraIndex = idx;
+    this.state.maxHp = 100 + idx * 50;
+    this.state.hp    = Math.min(this.state.hp, this.state.maxHp);
+    if (idx > this.state.highestEra) this.state.highestEra = idx;
+    Combat.mode     = 'peace';
+    Combat.enemies  = [];
+    Combat.peaceTimer = Combat.PEACE_INITIAL;
+    Combat.bossSpawnCooldownUntil = performance.now() + 5000;
+    this.onEraUnlocked(idx);
   },
 
   // Reacción a un desbloqueo de era: pausa breve + transición + notificación.

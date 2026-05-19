@@ -18,6 +18,22 @@
     <h1 class="boot-title">GÉNESIS</h1>
     <p class="boot-tagline">Un punto de luz</p>
   </div>
+  <!-- HUD de combate: vida del jugador y monedas -->
+  <div class="combat-hud" id="combat-hud">
+    <div class="hp-bar-wrap">
+      <span class="combat-label">HP</span>
+      <div class="hp-bar-track" id="hp-bar">
+        <div class="hp-bar-fill" id="hp-bar-fill"></div>
+      </div>
+      <span class="hp-bar-text" id="hp-bar-text">100 / 100</span>
+    </div>
+    <div class="coin-counter">
+      <span class="coin-icon">✦</span>
+      <span id="coin-value">0</span>
+      <span class="coin-label">Monedas</span>
+    </div>
+  </div>
+
   <!-- Barra superior: era actual, energía total, energía por segundo -->
   <header class="topbar">
     <div class="stat era">
@@ -43,7 +59,7 @@
 
   <!-- Escenario central: aquí vive el canvas con la entidad evolutiva -->
   <main class="stage">
-    <canvas id="canvas" aria-label="Entidad evolutiva, click para generar energía"></canvas>
+    <canvas id="canvas" aria-label="Entidad evolutiva, click para generar energía o dañar enemigos"></canvas>
     <div class="hint" id="hint">Haz click en la luz</div>
 
     <!-- Indicador del multiplicador de CU (visible cuando hay CU) -->
@@ -51,6 +67,14 @@
       <span class="cu-badge-label">×</span>
       <span class="cu-badge-value" id="cu-badge-value">1.00</span>
       <span class="cu-badge-hint">CU</span>
+    </div>
+
+    <!-- Barra de vida del jefe (visible solo durante combate de jefe) -->
+    <div class="boss-bar-container" id="boss-bar-container" hidden>
+      <span class="boss-bar-label" id="boss-bar-label">JEFE</span>
+      <div class="boss-bar-track">
+        <div class="boss-bar-fill" id="boss-bar-fill"></div>
+      </div>
     </div>
   </main>
 
@@ -83,7 +107,7 @@
   <!-- Overlays de transición de era -->
   <div class="era-flash" id="era-flash" aria-hidden="true"></div>
   <div class="era-notification" id="era-notification" aria-live="polite">
-    <span class="era-notification-pre">Nueva era</span>
+    <span class="era-notification-pre" id="era-notification-pre">Nueva era</span>
     <span class="era-notification-name" id="era-notification-name"></span>
   </div>
 
@@ -107,7 +131,10 @@
   <script src="js/save.js"></script>
   <script src="js/stages.js"></script>
   <script src="js/balance.js"></script>
+  <script src="js/enemies.js"></script>
   <script src="js/visuals.js"></script>
+  <script src="js/weapons.js"></script>
+  <script src="js/combat.js"></script>
   <script src="js/prestige.js"></script>
   <script src="js/tutorial.js"></script>
   <script src="js/ui.js"></script>

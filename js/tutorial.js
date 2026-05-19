@@ -128,4 +128,30 @@ const Tutorial = {
     this.tip.hidden = true;
     Save.save(Game.state); // persistimos el "ya visto" enseguida
   },
+
+  // Disparadores de combate — llamados directamente desde combat.js
+  triggerFirstEnemy() {
+    if (this.showing) return;
+    if (Game.state.tutorialSeen.firstEnemy) return;
+    this.show('firstEnemy',
+      'Hacé click sobre los enemigos para dañarlos. Tu arma (Pulso Cósmico) dispara sola cada 3 segundos.',
+      '#canvas', 'center');
+  },
+
+  triggerFirstBoss() {
+    if (this.showing) return;
+    if (Game.state.tutorialSeen.firstBoss) return;
+    this.show('firstBoss',
+      '¡Un jefe bloquea el avance de era! Tenés mucha vida. Cuando veas el anillo rojo, hacele click 5 veces para interrumpir su ataque especial.',
+      '#canvas', 'center');
+  },
+
+  triggerFirstDebilitation() {
+    if (this.showing) return;
+    if (Game.state.tutorialSeen.firstDebilitation) return;
+    const hud = document.getElementById('hp-bar-fill');
+    this.show('firstDebilitation',
+      '¡Te debilitaron! Tu producción baja 10% por 60 segundos. Si morís de nuevo en los próximos 5 minutos, perdés una era y la mitad de tu energía.',
+      hud || '#canvas', hud ? 'bottom' : 'center');
+  },
 };

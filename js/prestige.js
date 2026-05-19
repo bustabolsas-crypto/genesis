@@ -94,6 +94,11 @@ const Prestige = {
     state.runStartTime = Date.now();
     state.activeBuffs = {};
     state.buffCooldowns = {};
+    state.coins = 0;
+    state.hp = 100;
+    state.maxHp = 100;
+    state.debilitatedUntil = 0;
+    state.debilitationCooldown = 0;
 
     // Forzar a UI a reconstruir los paneles desde cero.
     UI.generatorEls = {};
@@ -101,6 +106,9 @@ const Prestige = {
     UI.lastEraRendered = -1;
     document.getElementById('generators-list').innerHTML = '';
     document.getElementById('upgrades-list').innerHTML = '';
+
+    // Reiniciar el sistema de combate
+    Combat.init();
 
     // Animación visual + notificación.
     Visuals.startBigBang();

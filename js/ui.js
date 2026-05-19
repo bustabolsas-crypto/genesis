@@ -100,9 +100,17 @@ const UI = {
       upgradesList:   document.getElementById('upgrades-list'),
       eraNotif:       document.getElementById('era-notification'),
       eraNotifName:   document.getElementById('era-notification-name'),
+      eraNotifPre:    document.getElementById('era-notification-pre'),
       eraFlash:       document.getElementById('era-flash'),
       cuBadge:        document.getElementById('cu-badge'),
       cuBadgeValue:   document.getElementById('cu-badge-value'),
+      // Combate
+      hpBarFill:      document.getElementById('hp-bar-fill'),
+      hpBarText:      document.getElementById('hp-bar-text'),
+      coinValue:      document.getElementById('coin-value'),
+      bossBarContainer: document.getElementById('boss-bar-container'),
+      bossBarLabel:   document.getElementById('boss-bar-label'),
+      bossBarFill:    document.getElementById('boss-bar-fill'),
     };
 
     this.els.btnSave.addEventListener('click', () => {
@@ -190,6 +198,9 @@ const UI = {
     // ----- Power-ups activos -----
     this.updateBuffDisplay(state);
 
+    // ----- Combate: HP y monedas -----
+    this.updateCombatHUD(state);
+
     // ----- Tutorial -----
     Tutorial.check(state);
   },
@@ -224,7 +235,88 @@ const UI = {
 
   // Notificación de boost expirado (reutiliza el mismo sistema de era-notification).
   showBuffExpiredNotification(name) {
-    this.showEraNotification(name + ' terminado');
+    this.showEraNotification(name + ' terminado', 'Power-up');
+  },
+
+  // Actualiza la barra de HP, monedas y la barra del jefe
+  updateCombatHUD(state) {
+    // Barra de HP
+    const hpRatio = Math.max(0, Math.min(1, state.hp / state.maxHp));
+    if (this.els.hpBarFill) {
+      this.els.hpBarFill.style.width = (hpRatio * 100).toFixed(1) + '%';
+      // Color: verde → amarillo → rojo según vida restante
+      const hue = Math.round(hpRatio * 120);
+      this.els.hpBarFill.style.background =
+        `linear-gradient(90deg, hsl(${hue},90%,45%), hsl(${hue},80%,60%))`;
+    }
+    if (this.els.hpBarText) {
+      this.els.hpBarText.textContent = Math.ceil(state.hp) + ' / ' + state.maxHp;
+    }
+    // Indicador de debilitación
+    const debilited = state.debilitatedUntil && Date.now() < state.debilitatedUntil;
+    if (this.els.hpBarFill) {
+      this.els.hpBarFill.classList.toggle('debilitated', !!debilited);
+    }
+
+    // Contador de monedas
+    if (this.els.coinValue) {
+      this.els.coinValue.textContent = formatNumber(state.coins || 0);
+    }
+
+    // Barra del jefe
+    if (this.els.bossBarContainer) {
+      if (Combat.mode === 'boss') {
+        const boss = Combat.enemies.find(e => e.isBoss && e.alive);
+        if (boss) {
+          this.els.bossBarContainer.hidden = false;
+          if (this.els.bossBarLabel) this.els.bossBarLabel.textContent = boss.name;
+          if (this.els.bossBarFill) {
+            this.els.bossBarFill.style.width = (Math.max(0, boss.hp / boss.maxHp) * 100).toFixed(1) + '%';
+          }
+        } else {
+          this.els.bossBarContainer.hidden = true;
+        }
+      } else {
+        this.els.bossBarContainer.hidden = true;
+      }
+    }
+  },
+
+  // Notificación de aparición de jefe (usa el mismo sistema de era-notification)
+  showBossWarning(bossName) {
+    this.showEraNotification(bossName, '¡Jefe!');
+    if (this.els.eraFlash) {
+      this.els.eraFlash.classList.remove('show', 'big');
+      void this.els.eraFlash.offsetWidth;
+      this.els.eraFlash.classList.add('show', 'big');
+    }
+  },
+
+  showBossWindup() {
+    this.showEraNotification('¡ESPECIAL!', 'Interrumpí con 5 clicks');
+  },
+
+  showBossInterrupted() {
+    this.showEraNotification('Interrumpido', '¡Bien hecho!');
+  },
+
+  showDebilitationNotification() {
+    this.showEraNotification('Debilitado −10% EPS', '¡Cuidado!');
+  },
+
+  showDeathModal() {
+    Modal.show({
+      title: '¡Derrotado!',
+      body: `
+        <p class="modal-lead">Caíste dos veces en 5 minutos. El universo retrocedió.</p>
+        <ul class="reset-list">
+          <li>Perdiste una era</li>
+          <li>Tu energía se redujo a la mitad</li>
+        </ul>
+        <p class="dim">La siguiente era requiere derrotar un jefe. ¡Preparate!</p>
+      `,
+      buttons: [{ label: 'Continuar', primary: true }],
+    });
   },
 
   // Construye/actualiza las tarjetas de generadores. Sólo añade las que faltan.
@@ -385,9 +477,10 @@ const UI = {
     setTimeout(() => el.remove(), 1100);
   },
 
-  // Notificación grande "Nueva era: X" + flash de pantalla.
-  showEraNotification(name) {
+  // Notificación grande centrada + flash de pantalla opcional.
+  showEraNotification(name, preText = 'Nueva era') {
     this.els.eraNotifName.textContent = name;
+    if (this.els.eraNotifPre) this.els.eraNotifPre.textContent = preText;
     this.els.eraNotif.classList.remove('show');
     void this.els.eraNotif.offsetWidth;
     this.els.eraNotif.classList.add('show');
