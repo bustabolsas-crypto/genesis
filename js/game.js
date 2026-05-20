@@ -44,6 +44,16 @@ function createInitialState() {
     timePlayedSeconds: 0,
     highestEra: 0,
 
+    // -------- Armas --------
+    weaponInventory: ['pulso_cuantico'],   // IDs que posee el jugador
+    weaponSlots:     ['pulso_cuantico', null, null],  // 3 slots equipados
+    // Shield (Campo de Fuerza)
+    shieldHp:          0,
+    shieldMaxHp:       0,
+    shieldBroken:      false,
+    shieldBrokenAt:    0,
+    shieldLastDamageAt: 0,
+
     // -------- Settings & tutorial --------
     soundEnabled: false,
     tutorialSeen: {
@@ -122,6 +132,34 @@ const Game = {
     // runStartTime puede haberse perdido en saves viejos.
     if (!this.state.runStartTime) this.state.runStartTime = Date.now();
 
+    // Migración del sistema de armas (Fase C.1)
+    if (!Array.isArray(this.state.weaponInventory) || !this.state.weaponInventory.length) {
+      this.state.weaponInventory = ['pulso_cuantico'];
+    }
+    if (!Array.isArray(this.state.weaponSlots) || this.state.weaponSlots.length !== 3) {
+      this.state.weaponSlots = ['pulso_cuantico', null, null];
+    }
+    // Si el slot 1 tenía 'pulso_cosmico' (placeholder), reemplazarlo
+    this.state.weaponSlots = this.state.weaponSlots.map(id =>
+      id === 'pulso_cosmico' ? 'pulso_cuantico' : id
+    );
+    // Normalizar: eliminar del inventario IDs que ya no existen
+    this.state.weaponInventory = this.state.weaponInventory.filter(
+      id => id === 'pulso_cuantico' || id in WEAPON_DEFS
+    );
+    if (!this.state.weaponInventory.length) this.state.weaponInventory = ['pulso_cuantico'];
+    // Asegurar que las armas equipadas estén en el inventario
+    for (let si = 0; si < 3; si++) {
+      const id = this.state.weaponSlots[si];
+      if (id && !this.state.weaponInventory.includes(id)) {
+        this.state.weaponSlots[si] = null;
+      }
+    }
+    // Inicializar escudo si Campo de Fuerza está equipado
+    if (this.state.weaponSlots.includes('campo_fuerza')) {
+      if (!(this.state.shieldMaxHp > 0)) Weapons.initShield(this.state);
+    }
+
     // Asegurar campos de combate si viene de un save viejo
     if (typeof this.state.hp !== 'number' || !isFinite(this.state.hp)) {
       this.state.maxHp = 100 + this.state.eraIndex * 50;
@@ -180,8 +218,12 @@ const Game = {
       console.log(
         '%cGénesis listo.',
         'color:#00ffe1;font-weight:600',
-        '\nDev:  Game.devSetEra(0..11)  → saltar a una era',
-        '\n      Game.devGiveCU(n)      → otorgar CU para probar prestige',
+        '\nDev:  Game.devSetEra(0..11)       → saltar a una era',
+        '\n      Game.devGiveCU(n)           → otorgar CU para probar prestige',
+        '\n      Game.devGiveAllWeapons()    → las 14 armas al inventario',
+        '\n      Game.devGiveWeapon("id")    → una arma específica',
+        '\n      Game.devEquip("id", 1|2|3)  → equipar en slot',
+        '\n      Game.devListWeapons()       → listar IDs de armas',
         '\nÍndices:', STAGES.map((s, i) => i + ':' + s.name).join('  ')
       );
       // Tabla con tiempos proyectados de cada transición (compara con el pacing
@@ -217,6 +259,58 @@ const Game = {
   devGiveCU(n) {
     this.state.cu = (this.state.cu || 0) + (n || 0);
     console.log('CU ahora:', this.state.cu, 'multiplicador:', Prestige.multiplier());
+  },
+
+  // Dev: lista todas las armas disponibles.
+  devListWeapons() {
+    console.table(
+      Object.values(WEAPON_DEFS).map(d => ({
+        id: d.id, nombre: d.nombre, tier: d.tier, tipo: d.tipo,
+        damage: d.damage, interval: d.attackInterval + 'ms',
+      }))
+    );
+  },
+
+  // Dev: agrega un arma al inventario.
+  devGiveWeapon(id) {
+    if (!WEAPON_DEFS[id]) {
+      console.warn('ID no existe. Usa Game.devListWeapons() para ver los IDs válidos.');
+      return;
+    }
+    if (!this.state.weaponInventory.includes(id)) {
+      this.state.weaponInventory.push(id);
+      console.log('[Dev] Arma añadida al inventario:', id);
+    } else {
+      console.log('[Dev] Ya tenías:', id);
+    }
+  },
+
+  // Dev: agrega las 14 armas al inventario.
+  devGiveAllWeapons() {
+    for (const id of Object.keys(WEAPON_DEFS)) {
+      if (!this.state.weaponInventory.includes(id)) {
+        this.state.weaponInventory.push(id);
+      }
+    }
+    console.log('[Dev] Inventario con las 14 armas:', this.state.weaponInventory);
+  },
+
+  // Dev: equipa un arma en un slot (1, 2 ó 3).
+  devEquip(id, slot) {
+    if (!WEAPON_DEFS[id]) { console.warn('ID inválido'); return; }
+    if (slot < 1 || slot > 3) { console.warn('slot debe ser 1, 2 ó 3'); return; }
+    if (!this.state.weaponInventory.includes(id)) {
+      this.state.weaponInventory.push(id);
+    }
+    // Si ya estaba en otro slot, limpiar
+    for (let si = 0; si < 3; si++) {
+      if (this.state.weaponSlots[si] === id) this.state.weaponSlots[si] = null;
+    }
+    this.state.weaponSlots[slot - 1] = id;
+    if (id === 'campo_fuerza' && !(this.state.shieldMaxHp > 0)) {
+      Weapons.initShield(this.state);
+    }
+    console.log('[Dev] Equipado', id, 'en slot', slot, '→ slots:', this.state.weaponSlots);
   },
 
   // Centraliza la suma de energía: actualiza energía actual + estadísticas.

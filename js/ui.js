@@ -132,6 +132,11 @@ const UI = {
         if (!ok) this.flash(this.els.btnBoost, 'Recargando...', 1200);
       });
     }
+
+    this.els.btnArsenal = document.getElementById('btn-arsenal');
+    if (this.els.btnArsenal) {
+      this.els.btnArsenal.addEventListener('click', () => Arsenal.show());
+    }
   },
 
   // Llamado cada frame con el estado actual.
@@ -680,6 +685,342 @@ const UI = {
         } },
       ],
     });
+  },
+};
+
+/* ============================================
+   ARSENAL — modal de inventario y slots de armas.
+   ============================================ */
+const Arsenal = {
+  _selectedWeapon: null,  // ID del arma seleccionada en inventario
+  _filterTier:     null,  // tier activo en filtros ('cuantica', etc.) o null
+
+  show() {
+    this._selectedWeapon = null;
+
+    Modal.show({
+      title: 'Arsenal',
+      body: this._buildBody(),
+      buttons: [{ label: 'Cerrar', onClick: () => {
+        const m = document.querySelector('.modal');
+        if (m) m.classList.remove('modal--arsenal');
+      }}],
+    });
+
+    // Aplicar clase wide tras abrir
+    const m = document.querySelector('.modal');
+    if (m) m.classList.add('modal--arsenal');
+  },
+
+  _buildBody() {
+    const state    = Game.state;
+    const slots    = state.weaponSlots || [null, null, null];
+    const inv      = state.weaponInventory || [];
+    const eraIdx   = state.eraIndex;
+    const eraScale = Math.pow(5, eraIdx);
+
+    const container = document.createElement('div');
+
+    // ── Sección de 3 slots ──
+    const slotsDiv = document.createElement('div');
+    slotsDiv.className = 'arsenal-slots';
+
+    for (let si = 0; si < 3; si++) {
+      const wid  = slots[si];
+      const def  = wid ? WEAPON_DEFS[wid] : null;
+      const card = document.createElement('div');
+      card.className = 'arsenal-slot' + (def ? '' : ' slot--empty');
+
+      const numDiv = document.createElement('div');
+      numDiv.className = 'slot-number';
+      numDiv.textContent = 'Slot ' + (si + 1);
+      card.appendChild(numDiv);
+
+      if (def) {
+        const tierColor = TIER_COLORS[def.tier] || '#fff';
+
+        const nameDiv = document.createElement('div');
+        nameDiv.className = 'slot-weapon-name';
+        nameDiv.textContent = def.nombre;
+        nameDiv.style.color = tierColor;
+        card.appendChild(nameDiv);
+
+        const tierDiv = document.createElement('div');
+        tierDiv.className = 'slot-weapon-tier';
+        tierDiv.textContent = TIER_NAMES[def.tier] || def.tier;
+        tierDiv.style.color = tierColor;
+        card.appendChild(tierDiv);
+
+        const statsDiv = document.createElement('div');
+        statsDiv.className = 'slot-weapon-stats';
+        if (def.tipo !== 'shield' && def.tipo !== 'orbital') {
+          const dmg = def.damage * eraScale;
+          const dps = def.attackInterval ? (dmg / (def.attackInterval / 1000)).toFixed(1) : '—';
+          statsDiv.textContent = formatNumber(dmg) + ' dmg · ' + dps + ' DPS';
+        } else if (def.tipo === 'shield') {
+          const shpMax = state.shieldMaxHp || (50 * eraScale);
+          const shpCur = Math.round(state.shieldHp || 0);
+          const broken = state.shieldBroken;
+          statsDiv.textContent = broken
+            ? '⛔ Roto (recarga 30s)'
+            : shpCur + ' / ' + formatNumber(shpMax) + ' HP';
+        } else if (def.tipo === 'orbital') {
+          const orbDmg = 8 * eraScale;
+          statsDiv.textContent = formatNumber(orbDmg) + ' dmg/colisión';
+        }
+        card.appendChild(statsDiv);
+
+        const unequipBtn = document.createElement('button');
+        unequipBtn.className = 'btn slot-btn-unequip';
+        unequipBtn.textContent = '✕ Vaciar';
+        unequipBtn.addEventListener('click', () => {
+          this._unequip(si);
+          this._refresh();
+        });
+        card.appendChild(unequipBtn);
+      } else {
+        const emptyLabel = document.createElement('div');
+        emptyLabel.className = 'slot-empty-label';
+        emptyLabel.textContent = 'Vacío';
+        card.appendChild(emptyLabel);
+      }
+
+      slotsDiv.appendChild(card);
+    }
+    container.appendChild(slotsDiv);
+
+    // ── Divider ──
+    const divider = document.createElement('div');
+    divider.className = 'arsenal-divider';
+    divider.textContent = 'Inventario';
+    container.appendChild(divider);
+
+    // ── Filtros de tier ──
+    const tiers  = ['cuantica', 'molecular', 'organica', 'planetaria', 'galactica'];
+    const filtersDiv = document.createElement('div');
+    filtersDiv.className = 'arsenal-filters';
+
+    const allBtn = document.createElement('button');
+    allBtn.className = 'filter-btn' + (this._filterTier === null ? ' active' : '');
+    allBtn.textContent = 'Todos';
+    allBtn.addEventListener('click', () => { this._filterTier = null; this._refresh(); });
+    filtersDiv.appendChild(allBtn);
+
+    for (const tier of tiers) {
+      // Mostrar solo tiers que el jugador tiene
+      const hasTier = inv.some(id => WEAPON_DEFS[id] && WEAPON_DEFS[id].tier === tier);
+      if (!hasTier) continue;
+      const btn = document.createElement('button');
+      btn.className = 'filter-btn' + (this._filterTier === tier ? ' active' : '');
+      btn.textContent = TIER_NAMES[tier];
+      btn.style.setProperty('color', this._filterTier === tier ? TIER_COLORS[tier] : '');
+      btn.addEventListener('click', () => {
+        this._filterTier = this._filterTier === tier ? null : tier;
+        this._refresh();
+      });
+      filtersDiv.appendChild(btn);
+    }
+    container.appendChild(filtersDiv);
+
+    // ── Grid de inventario ──
+    const grid = document.createElement('div');
+    grid.className = 'arsenal-grid';
+
+    const filtered = inv.filter(id => {
+      const def = WEAPON_DEFS[id];
+      if (!def) return false;
+      if (this._filterTier && def.tier !== this._filterTier) return false;
+      return true;
+    });
+
+    if (!filtered.length) {
+      const empty = document.createElement('div');
+      empty.className = 'arsenal-empty';
+      empty.textContent = this._filterTier
+        ? 'No tienes armas de este tier.'
+        : 'Tu inventario está vacío.';
+      grid.appendChild(empty);
+    }
+
+    for (const wid of filtered) {
+      const def        = WEAPON_DEFS[wid];
+      const tierColor  = TIER_COLORS[def.tier] || '#fff';
+      const equippedIn = slots.indexOf(wid); // -1 si no está equipada
+
+      const card = document.createElement('div');
+      card.className = 'weapon-card' + (this._selectedWeapon === wid ? ' selected' : '');
+      card.style.setProperty('--tier-color', tierColor);
+
+      // Header
+      const hdr = document.createElement('div');
+      hdr.className = 'weapon-card-header';
+
+      const dot = document.createElement('div');
+      dot.className = 'weapon-dot';
+      dot.style.background = tierColor;
+      dot.style.boxShadow  = '0 0 5px ' + tierColor;
+      hdr.appendChild(dot);
+
+      const nameSpan = document.createElement('div');
+      nameSpan.className = 'weapon-card-name';
+      nameSpan.textContent = def.nombre;
+      hdr.appendChild(nameSpan);
+
+      if (equippedIn >= 0) {
+        const badge = document.createElement('div');
+        badge.className = 'weapon-equipped-badge';
+        badge.textContent = 'Slot ' + (equippedIn + 1);
+        hdr.appendChild(badge);
+      }
+      card.appendChild(hdr);
+
+      const tierDiv = document.createElement('div');
+      tierDiv.className = 'weapon-card-tier';
+      tierDiv.textContent = TIER_NAMES[def.tier] || def.tier;
+      tierDiv.style.color = tierColor;
+      card.appendChild(tierDiv);
+
+      const statsDiv = document.createElement('div');
+      statsDiv.className = 'weapon-card-stats';
+      if (def.tipo !== 'shield' && def.tipo !== 'orbital') {
+        const dmg = def.damage * eraScale;
+        statsDiv.textContent = formatNumber(dmg) + ' dmg · ' + (def.attackInterval / 1000).toFixed(1) + 's';
+      } else if (def.tipo === 'shield') {
+        statsDiv.textContent = formatNumber(50 * eraScale) + ' HP escudo';
+      } else {
+        statsDiv.textContent = formatNumber(8 * eraScale) + ' dmg/colisión';
+      }
+      card.appendChild(statsDiv);
+
+      // Acciones inline (visibles cuando selected)
+      if (this._selectedWeapon === wid) {
+        const actions = document.createElement('div');
+        actions.className = 'weapon-card-actions';
+
+        for (let si = 0; si < 3; si++) {
+          const equipBtn = document.createElement('button');
+          equipBtn.className = 'btn';
+          equipBtn.textContent = 'Slot ' + (si + 1);
+          equipBtn.disabled = equippedIn === si;
+          const slotIdx = si;
+          equipBtn.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            this._equip(wid, slotIdx);
+            this._selectedWeapon = null;
+            this._refresh();
+          });
+          actions.appendChild(equipBtn);
+        }
+
+        const detailBtn = document.createElement('button');
+        detailBtn.className = 'btn';
+        detailBtn.textContent = 'Detalles';
+        detailBtn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          this._showDetail(wid, card);
+        });
+        actions.appendChild(detailBtn);
+
+        card.appendChild(actions);
+      }
+
+      card.addEventListener('click', () => {
+        this._selectedWeapon = this._selectedWeapon === wid ? null : wid;
+        this._refresh();
+      });
+
+      grid.appendChild(card);
+    }
+
+    container.appendChild(grid);
+    return container;
+  },
+
+  _equip(wid, slotIdx) {
+    const state = Game.state;
+    if (!Array.isArray(state.weaponInventory)) state.weaponInventory = [];
+    if (!Array.isArray(state.weaponSlots) || state.weaponSlots.length !== 3) {
+      state.weaponSlots = [null, null, null];
+    }
+    if (!state.weaponInventory.includes(wid)) state.weaponInventory.push(wid);
+
+    // Remover de cualquier otro slot si ya estaba
+    for (let si = 0; si < 3; si++) {
+      if (state.weaponSlots[si] === wid) state.weaponSlots[si] = null;
+    }
+    state.weaponSlots[slotIdx] = wid;
+
+    // Inicializar escudo si es Campo de Fuerza
+    if (wid === 'campo_fuerza' && !(state.shieldMaxHp > 0)) {
+      Weapons.initShield(state);
+    }
+    // Resetear timer del slot
+    Weapons.slotTimers[slotIdx] = 0;
+  },
+
+  _unequip(slotIdx) {
+    const state = Game.state;
+    if (!Array.isArray(state.weaponSlots)) state.weaponSlots = [null, null, null];
+    state.weaponSlots[slotIdx] = null;
+  },
+
+  _showDetail(wid, cardEl) {
+    const def = WEAPON_DEFS[wid];
+    if (!def) return;
+
+    // Remover detail previo si existe
+    const prev = cardEl.parentElement && cardEl.parentElement.querySelector('.weapon-detail');
+    if (prev) prev.remove();
+
+    const panel = document.createElement('div');
+    panel.className = 'weapon-detail';
+
+    const h4 = document.createElement('h4');
+    h4.textContent = def.nombre;
+    h4.style.color = TIER_COLORS[def.tier] || '#fff';
+    panel.appendChild(h4);
+
+    const eraScale = Math.pow(5, Game.state.eraIndex);
+    let stats = '';
+    if (def.tipo !== 'shield' && def.tipo !== 'orbital') {
+      stats += 'Daño: ' + formatNumber(def.damage * eraScale);
+      if (def.attackInterval) stats += ' · Intervalo: ' + (def.attackInterval / 1000).toFixed(1) + 's';
+      if (def.dotDps) stats += '\nDoT: ' + formatNumber(def.dotDps * eraScale) + '/seg × ' + def.dotDuration + 's';
+      if (def.chainCount) stats += '\nCadena: hasta ' + def.chainCount + ' enemigos';
+      if (def.range) stats += '\nRadio AoE: ' + def.range + 'px';
+      if (def.stunDuration) stats += '\nAturdimiento: ' + def.stunDuration + 's';
+      if (def.knockback) stats += '\nKnockback: sí';
+    } else if (def.tipo === 'shield') {
+      const shMax = 50 * eraScale;
+      stats = 'HP escudo: ' + formatNumber(shMax) + '\nRegen: 5%/seg (tras 3s sin daño)\nCooldown al romperse: 30s';
+    } else {
+      stats = 'Daño: ' + formatNumber(8 * eraScale) + ' por colisión\nRotación: 360° cada 4s\nCooldown por enemigo: 1s';
+    }
+
+    const desc = document.createElement('p');
+    desc.style.color = 'var(--text-dim)';
+    desc.style.marginBottom = '6px';
+    desc.textContent = def.description;
+    panel.appendChild(desc);
+
+    const statsPre = document.createElement('pre');
+    statsPre.style.cssText = 'font-family:var(--font-mono);font-size:10px;color:var(--text);white-space:pre-line;margin:0';
+    statsPre.textContent = stats;
+    panel.appendChild(statsPre);
+
+    // Insertar después del card en el grid
+    cardEl.after(panel);
+  },
+
+  _refresh() {
+    // Reconstruir el body del modal sin cerrarlo
+    const bodyEl = document.getElementById('modal-body');
+    if (!bodyEl) return;
+    bodyEl.innerHTML = '';
+    bodyEl.appendChild(this._buildBody());
+    // Mantener clase wide
+    const m = document.querySelector('.modal');
+    if (m) m.classList.add('modal--arsenal');
   },
 };
 

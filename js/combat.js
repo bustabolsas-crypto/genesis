@@ -20,6 +20,7 @@ const Combat = {
   mode: 'peace',       // 'peace' | 'wave' | 'boss'
   enemies: [],
   peaceTimer: 0,
+  _nextEnemyId: 0,    // contador auto-incremental para IDs de enemigos
 
   // Números flotantes de daño
   floatingNums: [],    // [{ x, y, text, color, life, maxLife }]
@@ -79,7 +80,7 @@ const Combat = {
       if (boss) this.tickBossSummon(boss, dt, state.eraIndex);
     }
 
-    Weapons.tick(dt, this.enemies, state.eraIndex);
+    Weapons.tick(dt, this.enemies, state);
     this.updateFloatingNums(dt);
 
     if (this.screenFlashAlpha > 0) {
@@ -110,7 +111,9 @@ const Combat = {
 
     for (let i = 0; i < count; i++) {
       const type = i === eliteSlot ? 'elite' : types[i % 3];
-      this.enemies.push(spawnEnemy(eraIdx, type, W, H));
+      const e = spawnEnemy(eraIdx, type, W, H);
+      e._id = this._nextEnemyId++;
+      this.enemies.push(e);
     }
     Tutorial.triggerFirstEnemy();
   },
@@ -118,6 +121,7 @@ const Combat = {
   requestBossSpawn(eraIdx) {
     this.bossSpawnCooldownUntil = performance.now() + 5000;
     const boss = spawnEnemy(eraIdx, 'boss', Visuals.width, Visuals.height);
+    boss._id = this._nextEnemyId++;
     this.mode    = 'boss';
     this.enemies = [boss];
     this.bossSpecialTimer    = 10;
@@ -137,6 +141,44 @@ const Combat = {
     for (const e of this.enemies) {
       if (!e.alive) continue;
       if (e.hitFlash > 0) e.hitFlash = Math.max(0, e.hitFlash - dt);
+
+      // Procesar DoT (daño acumulado, floating number cada 0.5s para evitar spam)
+      if (e.dots && e.dots.length > 0) {
+        const surviving = [];
+        for (const dot of e.dots) {
+          dot.remaining -= dt;
+          if (dot.remaining > 0) {
+            const dotDmg    = dot.dps * dt;
+            e.hp           -= dotDmg;
+            e.hitFlash      = Math.max(e.hitFlash || 0, 0.06);
+            dot._accum      = (dot._accum    || 0) + dotDmg;
+            dot._showTimer  = (dot._showTimer || 0) - dt;
+            if (dot._showTimer <= 0) {
+              dot._showTimer = 0.5;
+              if (dot._accum >= 0.5) {
+                this.floatingNums.push({
+                  x: e.x, y: e.y - e.radius - 8,
+                  text: '-' + formatNumber(Math.ceil(dot._accum)),
+                  color: dot.color || '#84cc16',
+                  life: 0.8, maxLife: 0.8,
+                });
+                dot._accum = 0;
+              }
+            }
+            if (e.hp > 0) {
+              surviving.push(dot);
+            } else {
+              this.killEnemy(e);
+              break;
+            }
+          }
+        }
+        e.dots = e.alive ? surviving : [];
+        if (!e.alive) continue;
+      }
+
+      // Omitir movimiento/ataque si está aturdido
+      if (e.stunUntil && Date.now() < e.stunUntil) continue;
 
       const dx = cx - e.x;
       const dy = cy - e.y;
@@ -222,10 +264,11 @@ const Combat = {
       isBoss:       false,
       isElite:      false,
       isMini:       true,
+      _id:          this._nextEnemyId++,
     };
   },
 
-  damageEnemy(enemy, amount, isPlayerClick) {
+  damageEnemy(enemy, amount, isPlayerClick, weaponColor = null) {
     if (!enemy || !enemy.alive) return;
     enemy.hp -= amount;
     enemy.hitFlash = 0.12;
@@ -233,7 +276,7 @@ const Combat = {
     this.floatingNums.push({
       x: enemy.x, y: enemy.y - enemy.radius - 8,
       text: '-' + formatNumber(Math.ceil(amount)),
-      color: isPlayerClick ? '#ffdd44' : '#00ffe1',
+      color: isPlayerClick ? '#ffdd44' : (weaponColor || '#00ffe1'),
       life: 0.8, maxLife: 0.8,
     });
 
@@ -265,7 +308,17 @@ const Combat = {
   },
 
   damagePlayer(amount, state) {
-    state.hp -= amount;
+    // Escudo absorbe primero
+    const remaining = Weapons.absorbDamage(amount, state);
+    if (remaining <= 0) {
+      // Toda la absorción fue por el escudo: flash azul suave + shake leve
+      document.body.classList.remove('screen-shake');
+      void document.body.offsetWidth;
+      document.body.classList.add('screen-shake');
+      return;
+    }
+
+    state.hp -= remaining;
 
     this.screenFlashAlpha = 0.3;
     this.screenFlashR = 255; this.screenFlashG = 50; this.screenFlashB = 50;
@@ -462,6 +515,28 @@ const Combat = {
     ctx.fillStyle   = flash ? '#ffffff' : e.color;
     drawShape(ctx, e.x, e.y, e.radius, e.shape);
     ctx.fill();
+
+    // --- DoT: anillo de veneno/fuego parpadeante ---
+    if (e.dots && e.dots.length > 0) {
+      ctx.globalAlpha = 0.3 + 0.2 * Math.abs(Math.sin(Date.now() / 180));
+      ctx.strokeStyle = e.dots[0].color || '#84cc16';
+      ctx.lineWidth   = 2;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, e.radius + 4, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // --- Stun: anillo amarillo estático ---
+    if (e.stunUntil && Date.now() < e.stunUntil) {
+      ctx.globalAlpha = 0.7;
+      ctx.strokeStyle = '#fbbf24';
+      ctx.lineWidth   = 2;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, e.radius + 6, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
 
     // --- Barra de vida (si está dañado) ---
     if (e.hp < e.maxHp) {
