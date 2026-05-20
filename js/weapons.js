@@ -264,6 +264,17 @@ const TIER_BASE_COST = {
   universal:  200000,
 };
 
+const EVO_COSTS = {
+  cuantica:   { gems: 5,   points: 200   },
+  molecular:  { gems: 10,  points: 500   },
+  organica:   { gems: 25,  points: 1500  },
+  planetaria: { gems: 50,  points: 4000  },
+  galactica:  { gems: 150, points: 12000 },
+  universal:  { gems: 500, points: 40000 },
+};
+
+const EVO_ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
+
 // Pesos por era: [tier, probabilidad%]
 const DROP_TIER_WEIGHTS = [
   [['cuantica',95],['molecular',5]],                                                         // era 0
@@ -317,34 +328,36 @@ const Weapons = {
     const eraIdx   = state.eraIndex;
     const eraScale = Math.pow(5, eraIdx);
     const ms       = Math.floor(level / 5);   // hitos cada 5 niveles
+    const stage    = (state.weaponEvolutions && state.weaponEvolutions[wid]) || 0;
+    const evoMult  = 1 + stage * 0.5;
 
     if (def.tipo === 'shield') {
       return {
-        shieldMaxHp:    20 * Math.pow(2.5, eraIdx) * (1 + level * 0.20),
+        shieldMaxHp:    20 * Math.pow(2.5, eraIdx) * (1 + level * 0.20) * evoMult,
         regenRate:      0.05 * (1 + ms * 0.50),
         brokenCooldown: level >= 20 ? 20000 : 30000,
       };
     }
     if (def.tipo === 'orbital') {
       return {
-        damage: 8  * eraScale * (1 + level * 0.15),
+        damage: 8 * eraScale * (1 + level * 0.15) * evoMult,
         speed:  (Math.PI * 2 / 4) * (1 + ms * 0.10),
         radius: 90 * (1 + ms * 0.05),
       };
     }
     if (def.tipo === 'orbital_secondary') {
       return {
-        damage: 3 * eraScale * (1 + level * 0.15),
+        damage: 3 * eraScale * (1 + level * 0.15) * evoMult,
         speed:  Math.PI * (1 + ms * 0.10),
       };
     }
 
     // Armas regulares
     const s = {
-      damage:         def.damage * (1 + level * 0.10) * eraScale,
+      damage:         def.damage * (1 + level * 0.10) * eraScale * evoMult,
       attackInterval: def.attackInterval,
       range:          def.range,
-      dotDps:         def.dotDps != null ? def.dotDps * eraScale : undefined,
+      dotDps:         def.dotDps != null ? def.dotDps * eraScale * evoMult : undefined,
       chainCount:     def.chainCount,
       multiCount:     def.multiCount,
     };
@@ -354,7 +367,7 @@ const Weapons = {
     if (tipo === 'aoe' || tipo === 'aoe_dot' || tipo === 'attract_aoe_dot')
                                                              s.range          = (def.range || 60) * (1 + ms * 0.10);
     if (tipo === 'dot' || tipo === 'aoe_dot' || tipo === 'attract_aoe_dot')
-                                                             s.dotDps         = (def.dotDps || 0) * (1 + ms * 0.20) * eraScale;
+                                                             s.dotDps         = (def.dotDps || 0) * (1 + ms * 0.20) * eraScale * evoMult;
     if (tipo === 'multi')                                    s.multiCount     = (def.multiCount || 3) + ms;
     if (tipo === 'multi_aoe') {
       s.multiCount = (def.multiCount || 4) + ms;

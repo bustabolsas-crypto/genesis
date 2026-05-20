@@ -1206,6 +1206,29 @@ body.buff-active::before {
   color: var(--text-dim);
 }
 
+.gem-counter, .evo-counter {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.gem-icon { font-size: 12px; line-height: 1; }
+.evo-icon { font-size: 12px; line-height: 1; }
+#gem-value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: #c084fc;
+  font-variant-numeric: tabular-nums;
+}
+#evo-value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: #67e8f9;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ============================================
    BARRA DEL JEFE (dentro del escenario)
    ============================================ */
@@ -1718,4 +1741,58 @@ body.screen-shake { animation: screen-shake 0.3s ease both; }
 @keyframes evo-ready-pulse {
   0%, 100% { opacity: 0.65; }
   50%       { opacity: 1; }
+}
+
+/* ── Panel de evolución (D.2a) ── */
+.weapon-evo-section {
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+.weapon-evo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.weapon-evo-label {
+  font-family: var(--font-display);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.weapon-evo-dots {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+}
+.weapon-evo-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,0.15);
+  background: transparent;
+  transition: background 0.2s;
+}
+.evo-dot-filled {
+  border-color: transparent;
+}
+.weapon-evo-cost {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+  letter-spacing: 0.04em;
+}
+.weapon-evo-max {
+  font-family: var(--font-display);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: center;
+  margin-top: 3px;
+  animation: evo-ready-pulse 2s ease-in-out infinite;
 }

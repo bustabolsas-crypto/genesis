@@ -108,6 +108,8 @@ const UI = {
       hpBarFill:      document.getElementById('hp-bar-fill'),
       hpBarText:      document.getElementById('hp-bar-text'),
       coinValue:      document.getElementById('coin-value'),
+      gemValue:       document.getElementById('gem-value'),
+      evoValue:       document.getElementById('evo-value'),
       bossBarContainer: document.getElementById('boss-bar-container'),
       bossBarLabel:   document.getElementById('boss-bar-label'),
       bossBarFill:    document.getElementById('boss-bar-fill'),
@@ -263,9 +265,15 @@ const UI = {
       this.els.hpBarFill.classList.toggle('debilitated', !!debilited);
     }
 
-    // Contador de monedas
+    // Contadores de monedas, gemas y puntos de evolución
     if (this.els.coinValue) {
       this.els.coinValue.textContent = formatNumber(state.coins || 0);
+    }
+    if (this.els.gemValue) {
+      this.els.gemValue.textContent = formatNumber(state.gems || 0);
+    }
+    if (this.els.evoValue) {
+      this.els.evoValue.textContent = formatNumber(state.evoPoints || 0);
     }
 
     // Barra del jefe
@@ -890,8 +898,9 @@ const Arsenal = {
   },
 
   // ── Puzzle piece SVG (viewBox -6 -6 76 76, cuerpo 8-56) ──
-  _buildPuzzle(wid, owned, tierColor, size, level) {
-    const lv = level || 0;
+  _buildPuzzle(wid, owned, tierColor, size, level, evoStage) {
+    const lv  = level    || 0;
+    const evo = evoStage || 0;
     const svg = _svgEl('svg', {
       width: size, height: size,
       viewBox: '-6 -6 76 76',
@@ -919,23 +928,48 @@ const Arsenal = {
     }
 
     if (owned && lv > 0) {
-      // Círculo de nivel — esquina superior derecha del cuerpo
+      // Círculo de nivel — esquina superior derecha
       const badge = _svgEl('g', {});
       badge.appendChild(_svgCircle(52, 10, 9, 'none', tierColor));
       const txt = _svgEl('text', {
         x: '52', y: '10',
-        'text-anchor': 'middle',
-        'dominant-baseline': 'central',
-        'font-size': '9',
-        'font-weight': '700',
-        fill: '#07070d',
-        'font-family': 'Space Mono, monospace',
+        'text-anchor': 'middle', 'dominant-baseline': 'central',
+        'font-size': '9', 'font-weight': '700',
+        fill: '#07070d', 'font-family': 'Space Mono, monospace',
       });
       txt.textContent = String(lv);
       badge.appendChild(txt);
       svg.appendChild(badge);
     } else if (owned) {
       svg.appendChild(_svgPath('M 44 11 L 50 18 L 60 8', tierColor, 'none', 2.5));
+    }
+
+    // Badge de evolución — esquina superior izquierda (E1-E5)
+    if (owned && evo > 0) {
+      const evoBadge = _svgEl('g', {});
+      if (evo >= 5) {
+        // E5: estrella en círculo
+        evoBadge.appendChild(_svgCircle(12, 10, 9, 'none', tierColor));
+        const star = _svgEl('text', {
+          x: '12', y: '10',
+          'text-anchor': 'middle', 'dominant-baseline': 'central',
+          'font-size': '9', fill: '#07070d',
+        });
+        star.textContent = '★';
+        evoBadge.appendChild(star);
+      } else {
+        // E1-E4: número romano en círculo
+        evoBadge.appendChild(_svgCircle(12, 10, 9, 'none', tierColor));
+        const rtxt = _svgEl('text', {
+          x: '12', y: '10',
+          'text-anchor': 'middle', 'dominant-baseline': 'central',
+          'font-size': '7', 'font-weight': '700',
+          fill: '#07070d', 'font-family': 'Space Mono, monospace',
+        });
+        rtxt.textContent = EVO_ROMAN[evo] || '';
+        evoBadge.appendChild(rtxt);
+      }
+      svg.appendChild(evoBadge);
     }
 
     return svg;
@@ -1022,9 +1056,10 @@ const Arsenal = {
       if (def) {
         const tierColor = TIER_COLORS[def.tier] || '#fff';
         const wLevel    = (state.weaponLevels && state.weaponLevels[wid]) || 0;
+        const wEvo      = (state.weaponEvolutions && state.weaponEvolutions[wid]) || 0;
         card.style.setProperty('--tc', tierColor);
 
-        card.appendChild(this._buildPuzzle(wid, true, tierColor, 68, wLevel));
+        card.appendChild(this._buildPuzzle(wid, true, tierColor, 68, wLevel, wEvo));
 
         const nameDiv = document.createElement('div');
         nameDiv.className = 'slot-weapon-name';
@@ -1148,7 +1183,8 @@ const Arsenal = {
       body.className = 'weapon-card-body';
 
       const wLevel = (state.weaponLevels && state.weaponLevels[wid]) || 0;
-      body.appendChild(this._buildPuzzle(wid, owned, tc, 52, wLevel));
+      const wEvoG  = (state.weaponEvolutions && state.weaponEvolutions[wid]) || 0;
+      body.appendChild(this._buildPuzzle(wid, owned, tc, 52, wLevel, wEvoG));
 
       const info = document.createElement('div');
       info.className = 'weapon-info';
@@ -1317,11 +1353,7 @@ const Arsenal = {
     sec.appendChild(barTrack);
 
     if (lv >= MAX_LV) {
-      const evo = document.createElement('div');
-      evo.className = 'weapon-evo-ready';
-      evo.style.color = tc;
-      evo.textContent = 'Listo para evolución';
-      sec.appendChild(evo);
+      sec.appendChild(this._buildEvolutionPanel(wid, def, state, tc));
       return sec;
     }
 
@@ -1356,6 +1388,109 @@ const Arsenal = {
     }
 
     return sec;
+  },
+
+  _buildEvolutionPanel(wid, def, state, tc) {
+    const EVO_MAX = 5;
+    const stage   = (state.weaponEvolutions && state.weaponEvolutions[wid]) || 0;
+    const cost    = EVO_COSTS[def.tier] || { gems: 0, points: 0 };
+
+    const panel = document.createElement('div');
+    panel.className = 'weapon-evo-section';
+
+    // Header: label + dots de etapa
+    const header = document.createElement('div');
+    header.className = 'weapon-evo-header';
+
+    const stageLbl = document.createElement('span');
+    stageLbl.className = 'weapon-evo-label';
+    stageLbl.textContent = stage >= EVO_MAX
+      ? 'E5 — MAX'
+      : 'E' + stage + ' → E' + (stage + 1);
+    if (stage >= EVO_MAX) stageLbl.style.color = tc;
+    header.appendChild(stageLbl);
+
+    const dotsDiv = document.createElement('div');
+    dotsDiv.className = 'weapon-evo-dots';
+    for (let i = 1; i <= EVO_MAX; i++) {
+      const dot = document.createElement('span');
+      dot.className = 'weapon-evo-dot' + (i <= stage ? ' evo-dot-filled' : '');
+      if (i <= stage) dot.style.background = tc;
+      else            dot.style.borderColor = tc + '55';
+      dotsDiv.appendChild(dot);
+    }
+    header.appendChild(dotsDiv);
+    panel.appendChild(header);
+
+    if (stage >= EVO_MAX) {
+      const maxLbl = document.createElement('div');
+      maxLbl.className = 'weapon-evo-max';
+      maxLbl.textContent = 'Evolución máxima alcanzada';
+      maxLbl.style.color = tc;
+      panel.appendChild(maxLbl);
+      return panel;
+    }
+
+    // Costo
+    const costRow = document.createElement('div');
+    costRow.className = 'weapon-evo-cost';
+    costRow.textContent = cost.gems + ' 💎  ' + formatNumber(cost.points) + ' 🌀';
+    panel.appendChild(costRow);
+
+    const gems = state.gems || 0;
+    const pts  = state.evoPoints || 0;
+    const canAfford = gems >= cost.gems && pts >= cost.points;
+
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-upgrade' + (canAfford ? '' : ' btn-upgrade-disabled');
+    btn.style.setProperty('--uc', tc);
+    btn.style.width = '100%';
+    btn.style.marginTop = '4px';
+    btn.disabled = !canAfford;
+    btn.textContent = 'Evolucionar ▶';
+    if (canAfford) {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        this._doEvolve(wid, state);
+      });
+    }
+    panel.appendChild(btn);
+
+    if (!canAfford) {
+      const lacking = [];
+      if (gems < cost.gems) lacking.push('Faltan ' + (cost.gems - gems) + ' 💎');
+      if (pts  < cost.points) lacking.push(formatNumber(cost.points - pts) + ' 🌀');
+      const lack = document.createElement('div');
+      lack.className = 'weapon-upgrade-lack';
+      lack.textContent = lacking.join(' · ');
+      panel.appendChild(lack);
+    }
+
+    return panel;
+  },
+
+  _doEvolve(wid, state) {
+    const def = WEAPON_DEFS[wid];
+    if (!def) return;
+    if (!state.weaponEvolutions) state.weaponEvolutions = {};
+    const stage = state.weaponEvolutions[wid] || 0;
+    if (stage >= 5) return;
+    if (((state.weaponLevels && state.weaponLevels[wid]) || 0) < 20) return;
+    const cost = EVO_COSTS[def.tier];
+    if (!cost) return;
+    if ((state.gems || 0) < cost.gems) return;
+    if ((state.evoPoints || 0) < cost.points) return;
+
+    state.gems       = (state.gems     || 0) - cost.gems;
+    state.evoPoints  = (state.evoPoints || 0) - cost.points;
+    state.weaponEvolutions[wid] = stage + 1;
+
+    if (wid === 'campo_fuerza') {
+      const eff = Weapons.getEffectiveStats('campo_fuerza', state);
+      state.shieldMaxHp = eff.shieldMaxHp;
+      if (state.shieldHp > state.shieldMaxHp) state.shieldHp = state.shieldMaxHp;
+    }
+    this._refresh();
   },
 
   _forge(wid, cardEl) {

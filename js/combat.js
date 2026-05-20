@@ -303,6 +303,49 @@ const Combat = {
     // Sistema de drops
     this._processDrop(enemy, state);
 
+    // Gemas y puntos de evolución
+    const era = state.eraIndex;
+    if (enemy.isBoss) {
+      const gemCount = 1 + Math.floor(era / 2);
+      state.gems = (state.gems || 0) + gemCount;
+      this.floatingNums.push({
+        x: enemy.x, y: enemy.y - enemy.radius - 40,
+        text: '+' + gemCount + ' 💎', color: '#c084fc',
+        life: 1.5, maxLife: 1.5,
+      });
+      const pts = 50 + 25 * era;
+      state.evoPoints = (state.evoPoints || 0) + pts;
+      this.floatingNums.push({
+        x: enemy.x, y: enemy.y - enemy.radius - 56,
+        text: '+' + pts + ' 🌀', color: '#67e8f9',
+        life: 1.5, maxLife: 1.5,
+      });
+    } else if (enemy.isElite) {
+      if (Math.random() < 0.05) {
+        state.gems = (state.gems || 0) + 1;
+        this.floatingNums.push({
+          x: enemy.x, y: enemy.y - enemy.radius - 40,
+          text: '+1 💎', color: '#c084fc',
+          life: 1.2, maxLife: 1.2,
+        });
+      }
+      const pts = 10 + 5 * era;
+      state.evoPoints = (state.evoPoints || 0) + pts;
+      this.floatingNums.push({
+        x: enemy.x, y: enemy.y - enemy.radius - 25,
+        text: '+' + pts + ' 🌀', color: '#67e8f9',
+        life: 1.0, maxLife: 1.0,
+      });
+    } else if (!enemy.isMini) {
+      const pts = 1 + era;
+      state.evoPoints = (state.evoPoints || 0) + pts;
+      this.floatingNums.push({
+        x: enemy.x, y: enemy.y - enemy.radius - 22,
+        text: '+' + pts + '🌀', color: '#67e8f9',
+        life: 0.6, maxLife: 0.6,
+      });
+    }
+
     if (enemy.isBoss) {
       this.bossWindupActive = false;
       this.bossIsCharging   = false;
@@ -330,9 +373,9 @@ const Combat = {
     }
 
     let chance, minF, maxF;
-    if (enemy.isBoss)        { chance = 1.0;  minF = 20; maxF = 50; }
-    else if (enemy.isElite)  { chance = 0.30; minF = 5;  maxF = 15; }
-    else                     { chance = 0.05; minF = 1;  maxF = 3;  }
+    if (enemy.isBoss)        { chance = 1.0;  minF = 50; maxF = 150; }
+    else if (enemy.isElite)  { chance = 0.60; minF = 5;  maxF = 15;  }
+    else                     { chance = 0.20; minF = 1;  maxF = 3;   }
 
     if (!this._dropLuck && Math.random() >= chance) return;
 
@@ -341,8 +384,8 @@ const Combat = {
     if (!wid) return;
     this._giveFragments(wid, count, state, enemy);
 
-    // Boss: 5% chance de arma completa adicional
-    if (enemy.isBoss && Math.random() < 0.05) {
+    // Boss: 10% chance de arma completa adicional
+    if (enemy.isBoss && Math.random() < 0.10) {
       const bonus = pickDropWeapon(state.eraIndex);
       if (bonus) this._giveWeaponFull(bonus, state, enemy);
     }

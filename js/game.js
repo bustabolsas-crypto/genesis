@@ -45,10 +45,13 @@ function createInitialState() {
     highestEra: 0,
 
     // -------- Armas --------
-    weaponInventory: ['pulso_cuantico'],   // IDs que posee el jugador
-    weaponSlots:     ['pulso_cuantico', null, null],  // 3 slots equipados
-    fragments:       {},                  // { weapon_id: count }
-    weaponLevels:    {},                  // { weapon_id: level 0-20 }
+    weaponInventory:   ['pulso_cuantico'],   // IDs que posee el jugador
+    weaponSlots:       ['pulso_cuantico', null, null],  // 3 slots equipados
+    fragments:         {},                  // { weapon_id: count }
+    weaponLevels:      {},                  // { weapon_id: level 0-20 }
+    weaponEvolutions:  {},                  // { weapon_id: stage 0-5 }
+    gems:              0,                   // 💎 gemas (drop de jefes)
+    evoPoints:         0,                   // 🌀 puntos de evolución
     // Shield (Campo de Fuerza)
     shieldHp:          0,
     shieldMaxHp:       0,
@@ -155,6 +158,13 @@ const Game = {
         || Array.isArray(this.state.weaponLevels)) {
       this.state.weaponLevels = {};
     }
+    // Normalizar weaponEvolutions
+    if (!this.state.weaponEvolutions || typeof this.state.weaponEvolutions !== 'object'
+        || Array.isArray(this.state.weaponEvolutions)) {
+      this.state.weaponEvolutions = {};
+    }
+    if (typeof this.state.gems !== 'number') this.state.gems = 0;
+    if (typeof this.state.evoPoints !== 'number') this.state.evoPoints = 0;
     // Normalizar: eliminar del inventario IDs que ya no existen
     this.state.weaponInventory = this.state.weaponInventory.filter(
       id => id === 'pulso_cuantico' || id in WEAPON_DEFS
@@ -251,6 +261,10 @@ const Game = {
         '\n      Game.devSetWeaponLevel(id,n) → nivel upgrade de un arma',
         '\n      Game.devGiveCoins(n)         → otorgar monedas',
         '\n      Game.devMaxAllWeapons()      → todas las armas del inv a nivel 20',
+        '\n      Game.devGiveGems(n)          → otorgar gemas 💎',
+        '\n      Game.devGivePoints(n)        → otorgar puntos de evolución 🌀',
+        '\n      Game.devSetEvolution(id,n)   → evolución E0-E5 de un arma',
+        '\n      Game.devMaxEvolveAll()       → todas las armas del inv a L20/E5',
         '\n      Game.devGiveWeapon("id")    → una arma específica',
         '\n      Game.devEquip("id", 1|2|3)  → equipar en slot',
         '\n      Game.devListWeapons()       → listar IDs de armas',
@@ -260,6 +274,12 @@ const Game = {
       // objetivo definido en balance.js). Útil cuando se toca la fórmula de
       // generadores. Tarda ~1s en correr la simulación completa.
       Balance.printTable();
+      console.log(
+        '%cDrops de fragmentos',  'color:#fbbf24;font-weight:600',
+        '\n  Regular: 20%  ·  1-3 frags',
+        '\n  Élite:   60%  ·  5-15 frags',
+        '\n  Jefe:   100%  ·  50-150 frags  +  10% arma completa',
+      );
     }
   },
 
@@ -380,6 +400,46 @@ const Game = {
       this.state.shieldMaxHp = shEff.shieldMaxHp;
     }
     console.log('[Dev] Todas las armas del inventario a nivel 20.');
+  },
+
+  // Dev: otorga gemas.
+  devGiveGems(amount) {
+    this.state.gems = (this.state.gems || 0) + (amount || 0);
+    console.log('[Dev] Gemas ahora:', this.state.gems);
+  },
+
+  // Dev: otorga puntos de evolución.
+  devGivePoints(amount) {
+    this.state.evoPoints = (this.state.evoPoints || 0) + (amount || 0);
+    console.log('[Dev] Puntos de evolución ahora:', this.state.evoPoints);
+  },
+
+  // Dev: establece la etapa de evolución de un arma (0-5).
+  devSetEvolution(weaponId, stage) {
+    if (!WEAPON_DEFS[weaponId]) { console.warn('ID inválido'); return; }
+    if (!this.state.weaponEvolutions) this.state.weaponEvolutions = {};
+    const clamped = Math.max(0, Math.min(5, stage || 0));
+    this.state.weaponEvolutions[weaponId] = clamped;
+    if (weaponId === 'campo_fuerza') {
+      const shEff = Weapons.getEffectiveStats('campo_fuerza', this.state);
+      this.state.shieldMaxHp = shEff.shieldMaxHp;
+    }
+    console.log('[Dev] Evolución de', weaponId, 'ahora: E' + clamped);
+  },
+
+  // Dev: todas las armas del inventario a nivel 20 y etapa E5.
+  devMaxEvolveAll() {
+    if (!this.state.weaponLevels) this.state.weaponLevels = {};
+    if (!this.state.weaponEvolutions) this.state.weaponEvolutions = {};
+    for (const id of this.state.weaponInventory) {
+      this.state.weaponLevels[id] = 20;
+      this.state.weaponEvolutions[id] = 5;
+    }
+    if (this.state.weaponSlots && this.state.weaponSlots.includes('campo_fuerza')) {
+      const shEff = Weapons.getEffectiveStats('campo_fuerza', this.state);
+      this.state.shieldMaxHp = shEff.shieldMaxHp;
+    }
+    console.log('[Dev] Todas las armas del inventario a L20 / E5.');
   },
 
   // Dev: equipa un arma en un slot (1, 2 ó 3).
@@ -583,6 +643,7 @@ const Game = {
     const idx = this.state.eraIndex + 1;
     if (idx >= STAGES.length) return;
     this.state.eraIndex = idx;
+    this.state.evoPoints = (this.state.evoPoints || 0) + 100 * idx;
     this.state.maxHp = 100 + idx * 50;
     this.state.hp    = Math.min(this.state.hp, this.state.maxHp);
     if (this.state.weaponSlots && this.state.weaponSlots.includes('campo_fuerza')) {
