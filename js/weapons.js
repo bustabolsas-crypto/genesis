@@ -154,7 +154,7 @@ const Weapons = {
   // Escala ×2.5/era (mismo rate que daño de enemigos, no ×5 de armas).
   initShield(state) {
     const mult = Math.pow(2.5, state.eraIndex);
-    state.shieldMaxHp = 50 * mult;
+    state.shieldMaxHp = 20 * mult;
     if (!(state.shieldHp > 0)) state.shieldHp = state.shieldMaxHp;
     state.shieldBroken      = false;
     state.shieldBrokenAt    = 0;
@@ -201,7 +201,7 @@ const Weapons = {
       if (state.shieldBroken) {
         if ((Date.now() - state.shieldBrokenAt) >= 30000) {
           const mult = Math.pow(2.5, eraIdx);
-          state.shieldMaxHp        = 50 * mult;
+          state.shieldMaxHp        = 20 * mult;
           state.shieldHp           = state.shieldMaxHp;
           state.shieldBroken       = false;
           state.shieldBrokenAt     = 0;
