@@ -1302,13 +1302,12 @@ body.screen-shake { animation: screen-shake 0.3s ease both; }
 }
 
 /* ============================================
-   MODAL ARSENAL — slots y grid de inventario
+   MODAL ARSENAL — C.2b — Puzzle pieces
    ============================================ */
 
-/* Ancho más generoso para el arsenal */
-.modal.modal--arsenal { max-width: 580px; }
+.modal.modal--arsenal { max-width: 620px; }
 
-/* ---- Sección de 3 slots ---- */
+/* ---- 3 slots equipados ---- */
 .arsenal-slots {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1317,19 +1316,19 @@ body.screen-shake { animation: screen-shake 0.3s ease both; }
 }
 
 .arsenal-slot {
-  background:
-    linear-gradient(155deg, rgba(30,30,55,0.7) 0%, rgba(12,12,24,0.9) 100%);
+  background: linear-gradient(155deg, rgba(30,30,55,0.7) 0%, rgba(12,12,24,0.9) 100%);
   border: 1px solid rgba(var(--era-accent), 0.22);
   border-radius: 12px;
-  padding: 10px;
+  padding: 10px 8px 8px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  min-height: 110px;
+  align-items: center;
+  gap: 5px;
+  min-height: 158px;
 }
 .arsenal-slot.slot--empty {
   border-style: dashed;
-  opacity: 0.7;
+  opacity: 0.6;
 }
 .slot-number {
   font-family: var(--font-display);
@@ -1338,41 +1337,42 @@ body.screen-shake { animation: screen-shake 0.3s ease both; }
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--text-dim);
+  align-self: flex-start;
 }
 .slot-weapon-name {
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--text);
-  line-height: 1.3;
+  line-height: 1.2;
+  text-align: center;
 }
 .slot-weapon-tier {
   font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 .slot-weapon-stats {
-  font-size: 10px;
+  font-size: 9px;
   color: var(--text-dim);
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  flex: 1;
+  text-align: center;
 }
 .slot-empty-label {
   font-family: var(--font-body);
   font-size: 11px;
   color: var(--text-dim);
   font-style: italic;
-  flex: 1;
+  margin-top: 4px;
 }
 .slot-btn-unequip {
-  font-size: 11px;
-  padding: 4px 8px;
-  align-self: flex-start;
+  font-size: 10px;
+  padding: 3px 7px;
+  margin-top: auto;
 }
 
 /* ---- Separador ---- */
@@ -1396,10 +1396,10 @@ body.screen-shake { animation: screen-shake 0.3s ease both; }
   border-radius: 2px;
 }
 
-/* ---- Filtros de tier ---- */
+/* ---- Filtros ---- */
 .arsenal-filters {
   display: flex;
-  gap: 6px;
+  gap: 5px;
   flex-wrap: wrap;
   margin-bottom: 12px;
 }
@@ -1407,9 +1407,9 @@ body.screen-shake { animation: screen-shake 0.3s ease both; }
   font-family: var(--font-display);
   font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  padding: 4px 10px;
+  padding: 3px 9px;
   border-radius: 999px;
   background: rgba(255,255,255,0.04);
   border: 1px solid rgba(255,255,255,0.12);
@@ -1424,34 +1424,28 @@ body.screen-shake { animation: screen-shake 0.3s ease both; }
   color: rgb(var(--era-accent));
 }
 
-/* ---- Grid de inventario ---- */
+/* ---- Grid ---- */
 .arsenal-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
+  gap: 7px;
 }
 
-/* Tarjeta de arma en inventario */
+/* ---- Weapon card — layout horizontal puzzle + info ---- */
 .weapon-card {
-  background:
-    linear-gradient(155deg, rgba(30,30,55,0.5) 0%, rgba(12,12,24,0.85) 100%);
+  background: linear-gradient(155deg, rgba(30,30,55,0.5) 0%, rgba(12,12,24,0.85) 100%);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 9px 11px;
+  padding: 8px 10px 8px 14px;
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s, transform 0.1s;
   position: relative;
 }
-.weapon-card:hover {
-  border-color: rgba(var(--era-accent), 0.4);
-  transform: translateY(-1px);
-}
+.weapon-card:hover  { border-color: rgba(var(--era-accent), 0.4); transform: translateY(-1px); }
 .weapon-card.selected {
   border-color: rgba(var(--era-accent), 0.8);
   background: linear-gradient(155deg, rgba(40,40,70,0.6) 0%, rgba(16,16,32,0.9) 100%);
 }
-
-/* Borde izquierdo de color por tier */
 .weapon-card::before {
   content: '';
   position: absolute;
@@ -1461,17 +1455,26 @@ body.screen-shake { animation: screen-shake 0.3s ease both; }
   background: var(--tier-color, rgba(var(--era-accent), 0.6));
 }
 
+/* Fila principal del card */
+.weapon-card-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+/* Columna de info */
+.weapon-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .weapon-card-header {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 5px;
-}
-.weapon-dot {
-  width: 10px; height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  margin-top: 2px;
+  gap: 6px;
 }
 .weapon-card-name {
   font-family: var(--font-display);
@@ -1480,12 +1483,12 @@ body.screen-shake { animation: screen-shake 0.3s ease both; }
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text);
-  line-height: 1.3;
+  line-height: 1.2;
   flex: 1;
 }
 .weapon-equipped-badge {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 700;
   padding: 1px 5px;
   border-radius: 999px;
@@ -1496,12 +1499,11 @@ body.screen-shake { animation: screen-shake 0.3s ease both; }
   flex-shrink: 0;
 }
 .weapon-card-tier {
-  font-size: 9px;
+  font-size: 8px;
   font-family: var(--font-mono);
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  margin-bottom: 3px;
 }
 .weapon-card-stats {
   font-size: 9px;
@@ -1510,7 +1512,61 @@ body.screen-shake { animation: screen-shake 0.3s ease both; }
   font-variant-numeric: tabular-nums;
 }
 
-/* Acciones inline cuando el card está seleccionado */
+/* Fila de fragmentos / estado */
+.weapon-frag-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+}
+.weapon-frag-bar-wrap { flex: 1; }
+.weapon-frag-label {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  color: var(--text-dim);
+  margin-bottom: 3px;
+}
+.weapon-frag-bar {
+  height: 5px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.weapon-frag-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+.frag-bar-full {
+  animation: frag-bar-pulse 2.2s ease-in-out infinite;
+}
+.weapon-status-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-top: 5px;
+}
+
+/* Botón Forjar */
+.btn-forge {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  font-size: 9px;
+  background: transparent;
+  border: 1px solid var(--fc, #888);
+  border-radius: 4px;
+  color: var(--fc, #888);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  transition: opacity 0.15s, transform 0.1s;
+  white-space: nowrap;
+}
+.btn-forge:hover { opacity: 0.75; transform: scale(1.05); }
+
+/* Acciones (equipar) cuando selected */
 .weapon-card-actions {
   display: flex;
   gap: 4px;
@@ -1519,10 +1575,7 @@ body.screen-shake { animation: screen-shake 0.3s ease both; }
   padding-top: 7px;
   border-top: 1px solid rgba(255,255,255,0.06);
 }
-.weapon-card-actions button {
-  font-size: 10px;
-  padding: 3px 8px;
-}
+.weapon-card-actions button { font-size: 10px; padding: 3px 8px; }
 
 /* ---- Detail panel ---- */
 .weapon-detail {
@@ -1533,7 +1586,7 @@ body.screen-shake { animation: screen-shake 0.3s ease both; }
   margin-top: 10px;
   font-size: 12px;
   line-height: 1.6;
-  grid-column: 1 / -1;  /* ocupa todo el ancho del grid */
+  grid-column: 1 / -1;
 }
 .weapon-detail h4 {
   font-family: var(--font-display);
@@ -1545,7 +1598,7 @@ body.screen-shake { animation: screen-shake 0.3s ease both; }
   margin-bottom: 6px;
 }
 
-/* ---- Empty inventory ---- */
+/* ---- Empty ---- */
 .arsenal-empty {
   font-family: var(--font-body);
   font-size: 12px;
@@ -1555,3 +1608,28 @@ body.screen-shake { animation: screen-shake 0.3s ease both; }
   text-align: center;
   grid-column: 1 / -1;
 }
+
+/* ---- Animaciones ---- */
+@keyframes frag-bar-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
+@keyframes forge-flash-anim {
+  0%         { box-shadow: none; }
+  25%        { box-shadow: 0 0 18px 4px rgba(255,255,255,0.22); }
+  100%       { box-shadow: none; }
+}
+@keyframes forge-assemble-anim {
+  0%   { filter: brightness(1); }
+  30%  { filter: brightness(3) drop-shadow(0 0 12px white); }
+  60%  { filter: brightness(2) drop-shadow(0 0 6px white); }
+  100% { filter: brightness(1); }
+}
+@keyframes frag-cap-pulse {
+  0%, 100% { box-shadow: none; }
+  50%      { box-shadow: 0 0 7px var(--fc); }
+}
+
+.forge-flash { animation: forge-flash-anim 0.58s ease-out; }
+.forge-assemble { animation: forge-assemble-anim 0.58s ease-out; }
+.frag-cap-ready { animation: frag-cap-pulse 1.8s ease-in-out infinite; }

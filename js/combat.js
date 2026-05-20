@@ -43,6 +43,10 @@ const Combat = {
   // Previene re-spawn inmediato de boss tras avance de era
   bossSpawnCooldownUntil: 0,
 
+  // Dev: forzar próximo drop / luck mode
+  _forcedNextDrop: null,
+  _dropLuck: false,
+
   PEACE_INITIAL: 30,
   ATTACK_RANGE:  55,
   BOSS_INTERRUPT_NEEDED: 5,
@@ -296,6 +300,9 @@ const Combat = {
       life: 1.2, maxLife: 1.2,
     });
 
+    // Sistema de drops
+    this._processDrop(enemy, state);
+
     if (enemy.isBoss) {
       this.bossWindupActive = false;
       this.bossIsCharging   = false;
@@ -304,6 +311,65 @@ const Combat = {
         if (m.isMini) m.alive = false;
       }
       Game.advanceEra();
+    }
+  },
+
+  _processDrop(enemy, state) {
+    if (enemy.isMini) return;
+
+    // Drop forzado (dev)
+    if (this._forcedNextDrop) {
+      const { weaponId, full } = this._forcedNextDrop;
+      this._forcedNextDrop = null;
+      if (full) {
+        this._giveWeaponFull(weaponId, state, enemy);
+      } else {
+        this._giveFragments(weaponId, 3, state, enemy);
+      }
+      return;
+    }
+
+    let chance, minF, maxF;
+    if (enemy.isBoss)        { chance = 1.0;  minF = 20; maxF = 50; }
+    else if (enemy.isElite)  { chance = 0.30; minF = 5;  maxF = 15; }
+    else                     { chance = 0.05; minF = 1;  maxF = 3;  }
+
+    if (!this._dropLuck && Math.random() >= chance) return;
+
+    const count = minF + Math.floor(Math.random() * (maxF - minF + 1));
+    const wid   = pickDropWeapon(state.eraIndex);
+    if (!wid) return;
+    this._giveFragments(wid, count, state, enemy);
+
+    // Boss: 5% chance de arma completa adicional
+    if (enemy.isBoss && Math.random() < 0.05) {
+      const bonus = pickDropWeapon(state.eraIndex);
+      if (bonus) this._giveWeaponFull(bonus, state, enemy);
+    }
+  },
+
+  _giveFragments(wid, count, state, enemy) {
+    if (!state.fragments) state.fragments = {};
+    state.fragments[wid] = (state.fragments[wid] || 0) + count;
+
+    const def   = WEAPON_DEFS[wid];
+    const color = def ? (TIER_COLORS[def.tier] || '#fff') : '#fff';
+    const name  = def ? def.nombre : wid;
+
+    this.floatingNums.push({
+      x: enemy.x, y: enemy.y - enemy.radius - 25,
+      text: '+' + count + ' frag ' + name,
+      color,
+      life: 1.8, maxLife: 1.8,
+    });
+  },
+
+  _giveWeaponFull(wid, state, enemy) {
+    if (!state.weaponInventory) state.weaponInventory = [];
+    if (!state.weaponInventory.includes(wid)) {
+      state.weaponInventory.push(wid);
+      const isBossEnemy = enemy.isBoss;
+      setTimeout(() => UI.showWeaponDropNotification(wid), isBossEnemy ? 2500 : 0);
     }
   },
 
@@ -362,6 +428,11 @@ const Combat = {
     }
 
     state.hp = state.maxHp = 100 + state.eraIndex * 50;
+    if (Array.isArray(state.weaponSlots) && state.weaponSlots.includes('campo_fuerza')) {
+      const newMax = 20 * Math.pow(2.5, state.eraIndex);
+      state.shieldMaxHp = newMax;
+      state.shieldHp    = Math.min(state.shieldHp || 0, newMax);
+    }
     state.debilitationCooldown = 0;
     state.debilitatedUntil     = 0;
 

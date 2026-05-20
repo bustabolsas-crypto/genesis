@@ -309,6 +309,12 @@ const UI = {
     this.showEraNotification('Debilitado −10% EPS', '¡Cuidado!');
   },
 
+  showWeaponDropNotification(wid) {
+    const def = WEAPON_DEFS[wid];
+    if (!def) return;
+    this.showEraNotification('¡' + def.nombre + ' obtenida!', '¡Nueva arma!');
+  },
+
   showDeathModal({ newEraName = '—', genLosses = {} } = {}) {
     // Construir lista de generadores perdidos con sus nombres legibles
     const genNames = {};
@@ -689,15 +695,188 @@ const UI = {
 };
 
 /* ============================================
-   ARSENAL — modal de inventario y slots de armas.
+   ARSENAL — SVG helpers, iconos y modal.
    ============================================ */
+
+// ── SVG factory helpers ──
+function _svgEl(tag, attrs) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+  return el;
+}
+function _svgPath(d, stroke, fill, sw) {
+  return _svgEl('path', { d, stroke: stroke || 'currentColor', fill: fill || 'none',
+    'stroke-width': sw || 2.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+}
+function _svgCircle(cx, cy, r, stroke, fill, sw) {
+  return _svgEl('circle', { cx, cy, r, stroke: stroke || 'currentColor',
+    fill: fill || 'none', 'stroke-width': sw || 2.5 });
+}
+function _svgEllipse(cx, cy, rx, ry, stroke, fill, sw, transform) {
+  const a = { cx, cy, rx, ry, stroke: stroke || 'currentColor',
+    fill: fill || 'none', 'stroke-width': sw || 2 };
+  if (transform) a.transform = transform;
+  return _svgEl('ellipse', a);
+}
+function _svgPoly(points, stroke, fill, sw) {
+  return _svgEl('polygon', { points, stroke: stroke || 'currentColor',
+    fill: fill || 'none', 'stroke-width': sw || 2.5 });
+}
+
+// ── Iconos de armas (26) ─ espacio 64×64, cuerpo útil 8–56 ──
+const WEAPON_ICONS = {
+  pulso_cuantico(s, c) {
+    s.appendChild(_svgPath('M 32 10 L 24 30 L 32 30 L 24 54', c, 'none', 3));
+    s.appendChild(_svgPath('M 32 10 L 40 30 L 32 30', c, 'none', 3));
+  },
+  onda_probabilidad(s, c) {
+    s.appendChild(_svgPath('M 8 32 L 18 18 L 28 46 L 38 18 L 48 32', c, 'none', 2.5));
+  },
+  microexplosion(s, c) {
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4;
+      const x1 = 32 + 9 * Math.cos(a + Math.PI / 8), y1 = 32 + 9 * Math.sin(a + Math.PI / 8);
+      const x2 = 32 + 24 * Math.cos(a),               y2 = 32 + 24 * Math.sin(a);
+      s.appendChild(_svgPath(`M ${x1.toFixed(1)} ${y1.toFixed(1)} L ${x2.toFixed(1)} ${y2.toFixed(1)}`, c, 'none', 2));
+    }
+    s.appendChild(_svgCircle(32, 32, 6, c, c + '55'));
+  },
+  bit_cuantico(s, c) {
+    s.appendChild(_svgCircle(32, 32, 18, c, 'none', 1));
+    s.appendChild(_svgCircle(32, 32, 11, c, 'none', 1.5));
+    s.appendChild(_svgCircle(32, 32, 4, c, c));
+  },
+  campo_fuerza(s, c) {
+    const pts = Array.from({ length: 6 }, (_, i) => {
+      const a = i * Math.PI / 3 - Math.PI / 6;
+      return `${(32 + 20 * Math.cos(a)).toFixed(1)},${(32 + 20 * Math.sin(a)).toFixed(1)}`;
+    }).join(' ');
+    s.appendChild(_svgPoly(pts, c, c + '22'));
+    s.appendChild(_svgPath('M 32 18 L 32 44 M 22 26 L 42 26', c, 'none', 1.5));
+  },
+  foton_solitario(s, c) {
+    s.appendChild(_svgPath('M 32 8 L 32 56 M 8 32 L 56 32', c, 'none', 3));
+    s.appendChild(_svgPath('M 18 18 L 46 46 M 46 18 L 18 46', c, 'none', 1.5));
+    s.appendChild(_svgCircle(32, 32, 4, c, c));
+  },
+  onda_coherente(s, c) {
+    s.appendChild(_svgPath('M 8 24 Q 18 14 28 24 Q 38 34 48 24 Q 54 18 56 20', c, 'none', 2.5));
+    s.appendChild(_svgPath('M 8 40 Q 18 30 28 40 Q 38 50 48 40 Q 54 34 56 36', c, 'none', 2.5));
+  },
+  campo_singular(s, c) {
+    s.appendChild(_svgCircle(32, 32, 20, c, 'none', 1));
+    s.appendChild(_svgCircle(32, 32, 13, c, 'none', 1.5));
+    s.appendChild(_svgCircle(32, 32, 6, c, c + '44'));
+  },
+  sierra_molecular(s, c) {
+    const pts = Array.from({ length: 12 }, (_, i) => {
+      const a = i * Math.PI / 6, r = i % 2 === 0 ? 22 : 12;
+      return `${(32 + r * Math.cos(a)).toFixed(1)},${(32 + r * Math.sin(a)).toFixed(1)}`;
+    }).join(' ');
+    s.appendChild(_svgPoly(pts, c, c + '33', 2));
+  },
+  lanza_enlaces(s, c) {
+    s.appendChild(_svgPath('M 14 32 A 7 10 0 1 0 14 32.1', c, 'none', 2));
+    s.appendChild(_svgPath('M 32 32 A 7 10 0 1 0 32 32.1', c, 'none', 2));
+    s.appendChild(_svgPath('M 50 32 A 7 10 0 1 0 50 32.1', c, 'none', 2));
+    s.appendChild(_svgPath('M 21 32 L 25 32 M 39 32 L 43 32', c, 'none', 2));
+  },
+  acelerador_ionico(s, c) {
+    s.appendChild(_svgPath('M 12 32 L 46 32 L 39 24 M 46 32 L 39 40', c, 'none', 2.5));
+    s.appendChild(_svgPath('M 10 40 Q 15 36 12 30', c, 'none', 1.5));
+    s.appendChild(_svgPath('M 7 37 Q 11 33 9 27', c + '66', 'none', 1));
+  },
+  satelite_orbital(s, c) {
+    s.appendChild(_svgCircle(32, 32, 18, c, 'none', 2));
+    s.appendChild(_svgCircle(32, 14, 5, c, c));
+  },
+  vinculo_reactivo(s, c) {
+    s.appendChild(_svgCircle(18, 32, 9, c, c + '22'));
+    s.appendChild(_svgCircle(46, 32, 9, c, c + '22'));
+    s.appendChild(_svgPath('M 27 32 L 37 32', c, 'none', 2));
+    s.appendChild(_svgCircle(18, 32, 3, c, c));
+    s.appendChild(_svgCircle(46, 32, 3, c, c));
+  },
+  rafaga_ionica(s, c) {
+    s.appendChild(_svgPath('M 16 32 L 48 18 M 44 15 L 48 18 L 45 22', c, 'none', 2));
+    s.appendChild(_svgPath('M 16 32 L 52 32 M 48 29 L 52 32 L 48 35', c, 'none', 2));
+    s.appendChild(_svgPath('M 16 32 L 48 46 M 44 42 L 48 46 L 45 46', c, 'none', 2));
+  },
+  aguijon_neural(s, c) {
+    s.appendChild(_svgPath('M 32 10 L 32 50 L 28 44 M 32 50 L 36 44', c, 'none', 2.5));
+    s.appendChild(_svgPath('M 22 22 L 42 22 M 24 28 L 40 28', c, 'none', 2));
+  },
+  espora_toxica(s, c) {
+    s.appendChild(_svgPath('M 20 32 Q 10 32 10 24 Q 10 15 20 16 Q 22 9 32 10 Q 42 9 44 16 Q 54 15 54 24 Q 54 32 44 32 Z', c, c + '22', 2));
+    s.appendChild(_svgCircle(22, 38, 2.5, c, c));
+    s.appendChild(_svgCircle(32, 42, 2.5, c, c));
+    s.appendChild(_svgCircle(42, 38, 2.5, c, c));
+  },
+  pulso_bioluminiscente(s, c) {
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4, sw = i % 2 === 0 ? 2.5 : 1.5;
+      s.appendChild(_svgPath(`M 32 32 L ${(32 + 22 * Math.cos(a)).toFixed(1)} ${(32 + 22 * Math.sin(a)).toFixed(1)}`, c, 'none', sw));
+    }
+    s.appendChild(_svgCircle(32, 32, 6, c, c + '55'));
+  },
+  tendon_reflejo(s, c) {
+    s.appendChild(_svgPath('M 24 10 Q 46 20 24 32 Q 2 44 24 54', c, 'none', 3));
+    s.appendChild(_svgCircle(24, 10, 3.5, c, c));
+  },
+  espiral_genomica(s, c) {
+    s.appendChild(_svgPath('M 22 10 Q 42 20 22 32 Q 2 44 22 54', c, 'none', 2));
+    s.appendChild(_svgPath('M 42 10 Q 22 22 42 32 Q 62 44 42 54', c, 'none', 2));
+    for (const y of [20, 28, 36, 44]) {
+      s.appendChild(_svgPath(`M 22 ${y} L 42 ${y}`, c, 'none', 1.5));
+    }
+  },
+  tormenta_tectonica(s, c) {
+    s.appendChild(_svgPath('M 8 42 Q 20 32 32 42 Q 44 52 56 42', c, 'none', 2.5));
+    s.appendChild(_svgPath('M 8 30 Q 20 20 32 30 Q 44 40 56 30', c, 'none', 2));
+    s.appendChild(_svgPath('M 12 18 Q 22 10 32 18 Q 42 26 52 18', c, 'none', 1.5));
+  },
+  geyser_magmatico(s, c) {
+    s.appendChild(_svgPath('M 32 54 L 32 16', c, 'none', 4));
+    s.appendChild(_svgPath('M 32 22 Q 24 30 28 38', c, 'none', 2));
+    s.appendChild(_svgPath('M 32 22 Q 40 30 36 38', c, 'none', 2));
+    s.appendChild(_svgPath('M 32 14 Q 27 20 32 26 Q 37 20 32 14', c, c + '55', 2));
+  },
+  cinturon_asteroides(s, c) {
+    s.appendChild(_svgCircle(18, 44, 6, c, c + '44'));
+    s.appendChild(_svgCircle(32, 26, 6, c, c + '44'));
+    s.appendChild(_svgCircle(46, 44, 6, c, c + '44'));
+    s.appendChild(_svgPath('M 18 44 Q 25 18 32 26 Q 39 34 46 44', c, 'none', 1.5));
+  },
+  canon_plasma_estelar(s, c) {
+    s.appendChild(_svgPath('M 10 26 L 48 26 L 48 38 L 10 38 Z', c, c + '33', 2));
+    s.appendChild(_svgPath('M 48 25 L 57 32 L 48 39', c, c, 2.5));
+    s.appendChild(_svgPath('M 14 22 L 14 42 M 20 24 L 20 40', c, 'none', 2));
+  },
+  onda_magnetar(s, c) {
+    for (const r of [22, 16, 10, 5]) {
+      s.appendChild(_svgCircle(32, 32, r, c, 'none', r === 5 ? 2.5 : 1.5));
+    }
+    s.appendChild(_svgCircle(32, 32, 3, c, c));
+  },
+  singularidad_devoradora(s, c) {
+    s.appendChild(_svgCircle(32, 32, 9, c, '#060614', 2));
+    s.appendChild(_svgEllipse(32, 32, 22, 9, c, 'none', 2));
+    s.appendChild(_svgCircle(32, 32, 5, 'none', '#000000'));
+  },
+  colapso_cosmico(s, c) {
+    s.appendChild(_svgCircle(32, 32, 5, c, c));
+    for (let i = 0; i < 3; i++) {
+      s.appendChild(_svgEllipse(32, 32, 22, 8, c, 'none', 2, `rotate(${i * 60} 32 32)`));
+    }
+  },
+};
+
 const Arsenal = {
-  _selectedWeapon: null,  // ID del arma seleccionada en inventario
-  _filterTier:     null,  // tier activo en filtros ('cuantica', etc.) o null
+  _selectedWeapon: null,
+  _filterTier:     null,
 
   show() {
     this._selectedWeapon = null;
-
     Modal.show({
       title: 'Arsenal',
       body: this._buildBody(),
@@ -706,10 +885,99 @@ const Arsenal = {
         if (m) m.classList.remove('modal--arsenal');
       }}],
     });
-
-    // Aplicar clase wide tras abrir
     const m = document.querySelector('.modal');
     if (m) m.classList.add('modal--arsenal');
+  },
+
+  // ── Puzzle piece SVG (viewBox -6 -6 76 76, cuerpo 8-56) ──
+  _buildPuzzle(wid, owned, tierColor, size) {
+    const svg = _svgEl('svg', {
+      width: size, height: size,
+      viewBox: '-6 -6 76 76',
+    });
+    svg.style.overflow = 'visible';
+    svg.style.flexShrink = '0';
+    svg.style.display = 'block';
+    if (owned) svg.style.setProperty('--tc', tierColor);
+
+    // Pieza de fondo
+    const bg = _svgEl('path', {
+      d: 'M 8 8 L 26 8 Q 32 0 38 8 L 56 8 L 56 26 Q 64 32 56 38 L 56 56 L 8 56 Z',
+      fill: owned ? tierColor + '28' : tierColor + '10',
+      stroke: owned ? tierColor : tierColor + '88',
+      'stroke-width': owned ? '2' : '1.5',
+    });
+    if (owned) bg.style.filter = `drop-shadow(0 0 5px ${tierColor}66)`;
+    svg.appendChild(bg);
+
+    // Ícono del arma
+    const iconFn = WEAPON_ICONS[wid];
+    if (iconFn) {
+      const g = _svgEl('g', {});
+      g.style.opacity = owned ? '1' : '0.45';
+      iconFn(g, tierColor);
+      svg.appendChild(g);
+    }
+
+    // Checkmark de poseída
+    if (owned) {
+      svg.appendChild(_svgPath('M 44 11 L 50 18 L 60 8', tierColor, 'none', 2.5));
+    }
+
+    return svg;
+  },
+
+  // ── Fila de fragmentos / estado de posesión ──
+  _buildFragRow(wid, have, required, tierColor, owned, equippedIn) {
+    const row = document.createElement('div');
+    row.className = 'weapon-frag-row';
+
+    if (owned) {
+      const lbl = document.createElement('div');
+      lbl.className = 'weapon-status-label';
+      if (equippedIn >= 0) {
+        lbl.textContent = 'Equipada · Slot ' + (equippedIn + 1);
+        lbl.style.color = tierColor;
+      } else {
+        lbl.textContent = 'Disponible';
+      }
+      row.appendChild(lbl);
+    } else {
+      // Barra de fragmentos
+      const barWrap = document.createElement('div');
+      barWrap.className = 'weapon-frag-bar-wrap';
+
+      const lbl = document.createElement('div');
+      lbl.className = 'weapon-frag-label';
+      lbl.textContent = have + ' / ' + required + ' frags';
+      if (have >= required) lbl.style.color = tierColor;
+      barWrap.appendChild(lbl);
+
+      const track = document.createElement('div');
+      track.className = 'weapon-frag-bar';
+      const fill = document.createElement('div');
+      fill.className = 'weapon-frag-bar-fill' + (have >= required ? ' frag-bar-full' : '');
+      fill.style.width = Math.min(100, have / required * 100).toFixed(1) + '%';
+      fill.style.background = have >= required
+        ? `linear-gradient(90deg,${tierColor},${tierColor}cc)`
+        : `linear-gradient(90deg,${tierColor}88,${tierColor}44)`;
+      track.appendChild(fill);
+      barWrap.appendChild(track);
+      row.appendChild(barWrap);
+
+      if (have >= required) {
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-forge frag-cap-ready';
+        btn.textContent = 'Forjar';
+        btn.style.setProperty('--fc', tierColor);
+        btn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          this._forge(wid, btn.closest('.weapon-card'));
+        });
+        row.appendChild(btn);
+      }
+    }
+    return row;
   },
 
   _buildBody() {
@@ -718,10 +986,11 @@ const Arsenal = {
     const inv      = state.weaponInventory || [];
     const eraIdx   = state.eraIndex;
     const eraScale = Math.pow(5, eraIdx);
+    const frags    = state.fragments || {};
 
     const container = document.createElement('div');
 
-    // ── Sección de 3 slots ──
+    // ── 3 slots equipados ──
     const slotsDiv = document.createElement('div');
     slotsDiv.className = 'arsenal-slots';
 
@@ -738,6 +1007,10 @@ const Arsenal = {
 
       if (def) {
         const tierColor = TIER_COLORS[def.tier] || '#fff';
+        card.style.setProperty('--tc', tierColor);
+
+        // Puzzle piece prominente
+        card.appendChild(this._buildPuzzle(wid, true, tierColor, 68));
 
         const nameDiv = document.createElement('div');
         nameDiv.className = 'slot-weapon-name';
@@ -753,32 +1026,39 @@ const Arsenal = {
 
         const statsDiv = document.createElement('div');
         statsDiv.className = 'slot-weapon-stats';
-        if (def.tipo !== 'shield' && def.tipo !== 'orbital') {
+        if (def.tipo !== 'shield' && def.tipo !== 'orbital' && def.tipo !== 'orbital_secondary') {
           const dmg = def.damage * eraScale;
           const dps = def.attackInterval ? (dmg / (def.attackInterval / 1000)).toFixed(1) : '—';
-          statsDiv.textContent = formatNumber(dmg) + ' dmg · ' + dps + ' DPS';
+          statsDiv.textContent = formatNumber(dmg) + ' · ' + dps + ' dps';
         } else if (def.tipo === 'shield') {
-          const shpMax = state.shieldMaxHp || (50 * eraScale);
+          const shpMax = state.shieldMaxHp || (20 * eraScale);
           const shpCur = Math.round(state.shieldHp || 0);
-          const broken = state.shieldBroken;
-          statsDiv.textContent = broken
-            ? '⛔ Roto (recarga 30s)'
+          statsDiv.textContent = state.shieldBroken
+            ? '⛔ Roto (30s)'
             : shpCur + ' / ' + formatNumber(shpMax) + ' HP';
-        } else if (def.tipo === 'orbital') {
-          const orbDmg = 8 * eraScale;
-          statsDiv.textContent = formatNumber(orbDmg) + ' dmg/colisión';
+        } else {
+          statsDiv.textContent = formatNumber(def.damage * eraScale) + ' dmg';
         }
         card.appendChild(statsDiv);
 
         const unequipBtn = document.createElement('button');
         unequipBtn.className = 'btn slot-btn-unequip';
-        unequipBtn.textContent = '✕ Vaciar';
-        unequipBtn.addEventListener('click', () => {
-          this._unequip(si);
-          this._refresh();
-        });
+        unequipBtn.textContent = '✕';
+        unequipBtn.title = 'Vaciar slot';
+        unequipBtn.addEventListener('click', () => { this._unequip(si); this._refresh(); });
         card.appendChild(unequipBtn);
       } else {
+        // Slot vacío — puzzle fantasma
+        const ghostSvg = _svgEl('svg', { width: 68, height: 68, viewBox: '-6 -6 76 76' });
+        ghostSvg.style.overflow = 'visible';
+        ghostSvg.style.display = 'block';
+        ghostSvg.style.opacity = '0.25';
+        ghostSvg.appendChild(_svgEl('path', {
+          d: 'M 8 8 L 26 8 Q 32 0 38 8 L 56 8 L 56 26 Q 64 32 56 38 L 56 56 L 8 56 Z',
+          fill: 'none', stroke: '#ffffff', 'stroke-width': '1.5', 'stroke-dasharray': '4 3',
+        }));
+        card.appendChild(ghostSvg);
+
         const emptyLabel = document.createElement('div');
         emptyLabel.className = 'slot-empty-label';
         emptyLabel.textContent = 'Vacío';
@@ -792,11 +1072,11 @@ const Arsenal = {
     // ── Divider ──
     const divider = document.createElement('div');
     divider.className = 'arsenal-divider';
-    divider.textContent = 'Inventario';
+    divider.textContent = 'Todas las armas';
     container.appendChild(divider);
 
     // ── Filtros de tier ──
-    const tiers  = ['cuantica', 'molecular', 'organica', 'planetaria', 'galactica'];
+    const tiers = ['cuantica', 'molecular', 'organica', 'planetaria', 'galactica', 'universal'];
     const filtersDiv = document.createElement('div');
     filtersDiv.className = 'arsenal-filters';
 
@@ -807,9 +1087,6 @@ const Arsenal = {
     filtersDiv.appendChild(allBtn);
 
     for (const tier of tiers) {
-      // Mostrar solo tiers que el jugador tiene
-      const hasTier = inv.some(id => WEAPON_DEFS[id] && WEAPON_DEFS[id].tier === tier);
-      if (!hasTier) continue;
       const btn = document.createElement('button');
       btn.className = 'filter-btn' + (this._filterTier === tier ? ' active' : '');
       btn.textContent = TIER_NAMES[tier];
@@ -822,118 +1099,143 @@ const Arsenal = {
     }
     container.appendChild(filtersDiv);
 
-    // ── Grid de inventario ──
+    // ── Grid de armas ──
     const grid = document.createElement('div');
     grid.className = 'arsenal-grid';
 
-    const filtered = inv.filter(id => {
+    const allIds = Object.keys(WEAPON_DEFS);
+    const filtered = allIds.filter(id => {
       const def = WEAPON_DEFS[id];
-      if (!def) return false;
-      if (this._filterTier && def.tier !== this._filterTier) return false;
-      return true;
+      return def && (!this._filterTier || def.tier === this._filterTier);
     });
 
     if (!filtered.length) {
       const empty = document.createElement('div');
       empty.className = 'arsenal-empty';
-      empty.textContent = this._filterTier
-        ? 'No tienes armas de este tier.'
-        : 'Tu inventario está vacío.';
+      empty.textContent = 'No hay armas en este tier.';
       grid.appendChild(empty);
     }
 
     for (const wid of filtered) {
-      const def        = WEAPON_DEFS[wid];
-      const tierColor  = TIER_COLORS[def.tier] || '#fff';
-      const equippedIn = slots.indexOf(wid); // -1 si no está equipada
+      const def       = WEAPON_DEFS[wid];
+      const tc        = TIER_COLORS[def.tier] || '#fff';
+      const owned     = inv.includes(wid);
+      const equipped  = owned ? slots.indexOf(wid) : -1;
+      const have      = frags[wid] || 0;
+      const required  = TIER_FRAGMENTS[def.tier] || 0;
 
       const card = document.createElement('div');
       card.className = 'weapon-card' + (this._selectedWeapon === wid ? ' selected' : '');
-      card.style.setProperty('--tier-color', tierColor);
+      card.style.setProperty('--tier-color', tc);
 
-      // Header
-      const hdr = document.createElement('div');
-      hdr.className = 'weapon-card-header';
+      // ── Fila principal: puzzle + info ──
+      const body = document.createElement('div');
+      body.className = 'weapon-card-body';
 
-      const dot = document.createElement('div');
-      dot.className = 'weapon-dot';
-      dot.style.background = tierColor;
-      dot.style.boxShadow  = '0 0 5px ' + tierColor;
-      hdr.appendChild(dot);
+      body.appendChild(this._buildPuzzle(wid, owned, tc, 52));
 
-      const nameSpan = document.createElement('div');
-      nameSpan.className = 'weapon-card-name';
-      nameSpan.textContent = def.nombre;
-      hdr.appendChild(nameSpan);
+      const info = document.createElement('div');
+      info.className = 'weapon-info';
 
-      if (equippedIn >= 0) {
+      const nameRow = document.createElement('div');
+      nameRow.className = 'weapon-card-header';
+      const nameEl = document.createElement('div');
+      nameEl.className = 'weapon-card-name';
+      nameEl.textContent = def.nombre;
+      nameRow.appendChild(nameEl);
+      if (equipped >= 0) {
         const badge = document.createElement('div');
         badge.className = 'weapon-equipped-badge';
-        badge.textContent = 'Slot ' + (equippedIn + 1);
-        hdr.appendChild(badge);
+        badge.textContent = 'S' + (equipped + 1);
+        nameRow.appendChild(badge);
       }
-      card.appendChild(hdr);
+      info.appendChild(nameRow);
 
-      const tierDiv = document.createElement('div');
-      tierDiv.className = 'weapon-card-tier';
-      tierDiv.textContent = TIER_NAMES[def.tier] || def.tier;
-      tierDiv.style.color = tierColor;
-      card.appendChild(tierDiv);
+      const tierEl = document.createElement('div');
+      tierEl.className = 'weapon-card-tier';
+      tierEl.textContent = TIER_NAMES[def.tier] || def.tier;
+      tierEl.style.color = tc;
+      info.appendChild(tierEl);
 
-      const statsDiv = document.createElement('div');
-      statsDiv.className = 'weapon-card-stats';
-      if (def.tipo !== 'shield' && def.tipo !== 'orbital') {
-        const dmg = def.damage * eraScale;
-        statsDiv.textContent = formatNumber(dmg) + ' dmg · ' + (def.attackInterval / 1000).toFixed(1) + 's';
+      const statsEl = document.createElement('div');
+      statsEl.className = 'weapon-card-stats';
+      if (def.tipo !== 'shield' && def.tipo !== 'orbital' && def.tipo !== 'orbital_secondary') {
+        statsEl.textContent = formatNumber(def.damage * eraScale) + ' dmg · ' + (def.attackInterval / 1000).toFixed(1) + 's';
       } else if (def.tipo === 'shield') {
-        statsDiv.textContent = formatNumber(50 * eraScale) + ' HP escudo';
+        statsEl.textContent = formatNumber(20 * eraScale) + ' HP escudo';
       } else {
-        statsDiv.textContent = formatNumber(8 * eraScale) + ' dmg/colisión';
+        statsEl.textContent = formatNumber(def.damage * eraScale) + ' dmg/col.';
       }
-      card.appendChild(statsDiv);
+      info.appendChild(statsEl);
 
-      // Acciones inline (visibles cuando selected)
-      if (this._selectedWeapon === wid) {
-        const actions = document.createElement('div');
-        actions.className = 'weapon-card-actions';
+      // Barra de fragmentos o estado
+      info.appendChild(this._buildFragRow(wid, have, required, tc, owned, equipped));
 
-        for (let si = 0; si < 3; si++) {
-          const equipBtn = document.createElement('button');
-          equipBtn.className = 'btn';
-          equipBtn.textContent = 'Slot ' + (si + 1);
-          equipBtn.disabled = equippedIn === si;
-          const slotIdx = si;
-          equipBtn.addEventListener('click', (ev) => {
-            ev.stopPropagation();
-            this._equip(wid, slotIdx);
-            this._selectedWeapon = null;
-            this._refresh();
-          });
-          actions.appendChild(equipBtn);
-        }
+      body.appendChild(info);
+      card.appendChild(body);
 
-        const detailBtn = document.createElement('button');
-        detailBtn.className = 'btn';
-        detailBtn.textContent = 'Detalles';
-        detailBtn.addEventListener('click', (ev) => {
-          ev.stopPropagation();
-          this._showDetail(wid, card);
+      // Acciones (solo armas poseídas al seleccionarlas)
+      if (owned) {
+        card.addEventListener('click', () => {
+          this._selectedWeapon = this._selectedWeapon === wid ? null : wid;
+          this._refresh();
         });
-        actions.appendChild(detailBtn);
 
-        card.appendChild(actions);
+        if (this._selectedWeapon === wid) {
+          const actions = document.createElement('div');
+          actions.className = 'weapon-card-actions';
+          for (let si = 0; si < 3; si++) {
+            const btn = document.createElement('button');
+            btn.className = 'btn';
+            btn.textContent = 'Slot ' + (si + 1);
+            btn.disabled = equipped === si;
+            const idx = si;
+            btn.addEventListener('click', (ev) => {
+              ev.stopPropagation();
+              this._equip(wid, idx);
+              this._selectedWeapon = null;
+              this._refresh();
+            });
+            actions.appendChild(btn);
+          }
+          const detailBtn = document.createElement('button');
+          detailBtn.className = 'btn';
+          detailBtn.textContent = 'Detalles';
+          detailBtn.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            this._showDetail(wid, card);
+          });
+          actions.appendChild(detailBtn);
+          card.appendChild(actions);
+        }
       }
-
-      card.addEventListener('click', () => {
-        this._selectedWeapon = this._selectedWeapon === wid ? null : wid;
-        this._refresh();
-      });
 
       grid.appendChild(card);
     }
 
     container.appendChild(grid);
     return container;
+  },
+
+  _forge(wid, cardEl) {
+    const state = Game.state;
+    const def = WEAPON_DEFS[wid];
+    if (!def) return;
+    const required = TIER_FRAGMENTS[def.tier] || 0;
+    if (!state.fragments) state.fragments = {};
+    if ((state.fragments[wid] || 0) < required) return;
+
+    if (cardEl) {
+      cardEl.classList.add('forge-flash');
+      const svg = cardEl.querySelector('svg');
+      if (svg) svg.classList.add('forge-assemble');
+    }
+    setTimeout(() => {
+      state.fragments[wid] = 0;
+      if (!Array.isArray(state.weaponInventory)) state.weaponInventory = [];
+      if (!state.weaponInventory.includes(wid)) state.weaponInventory.push(wid);
+      this._refresh();
+    }, 580);
   },
 
   _equip(wid, slotIdx) {
@@ -951,7 +1253,7 @@ const Arsenal = {
     state.weaponSlots[slotIdx] = wid;
 
     // Inicializar escudo si es Campo de Fuerza
-    if (wid === 'campo_fuerza' && !(state.shieldMaxHp > 0)) {
+    if (wid === 'campo_fuerza') {
       Weapons.initShield(state);
     }
     // Resetear timer del slot
@@ -991,7 +1293,7 @@ const Arsenal = {
       if (def.stunDuration) stats += '\nAturdimiento: ' + def.stunDuration + 's';
       if (def.knockback) stats += '\nKnockback: sí';
     } else if (def.tipo === 'shield') {
-      const shMax = 50 * eraScale;
+      const shMax = 20 * eraScale;
       stats = 'HP escudo: ' + formatNumber(shMax) + '\nRegen: 5%/seg (tras 3s sin daño)\nCooldown al romperse: 30s';
     } else {
       stats = 'Daño: ' + formatNumber(8 * eraScale) + ' por colisión\nRotación: 360° cada 4s\nCooldown por enemigo: 1s';

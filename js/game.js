@@ -47,6 +47,7 @@ function createInitialState() {
     // -------- Armas --------
     weaponInventory: ['pulso_cuantico'],   // IDs que posee el jugador
     weaponSlots:     ['pulso_cuantico', null, null],  // 3 slots equipados
+    fragments:       {},                  // { weapon_id: count }
     // Shield (Campo de Fuerza)
     shieldHp:          0,
     shieldMaxHp:       0,
@@ -143,6 +144,11 @@ const Game = {
     this.state.weaponSlots = this.state.weaponSlots.map(id =>
       id === 'pulso_cosmico' ? 'pulso_cuantico' : id
     );
+    // Normalizar fragmentos
+    if (!this.state.fragments || typeof this.state.fragments !== 'object'
+        || Array.isArray(this.state.fragments)) {
+      this.state.fragments = {};
+    }
     // Normalizar: eliminar del inventario IDs que ya no existen
     this.state.weaponInventory = this.state.weaponInventory.filter(
       id => id === 'pulso_cuantico' || id in WEAPON_DEFS
@@ -155,9 +161,20 @@ const Game = {
         this.state.weaponSlots[si] = null;
       }
     }
-    // Inicializar escudo si Campo de Fuerza está equipado
+    // Inicializar / recalcular escudo si Campo de Fuerza está equipado.
+    // Siempre recalculamos shieldMaxHp desde la fórmula actual para que saves
+    // viejos (con una fórmula anterior) no queden con un valor fijo incorrecto.
     if (this.state.weaponSlots.includes('campo_fuerza')) {
-      if (!(this.state.shieldMaxHp > 0)) Weapons.initShield(this.state);
+      const shieldMax = 20 * Math.pow(2.5, this.state.eraIndex);
+      this.state.shieldMaxHp = shieldMax;
+      if (!(this.state.shieldHp > 0)) {
+        this.state.shieldHp = shieldMax;
+      } else {
+        this.state.shieldHp = Math.min(this.state.shieldHp, shieldMax);
+      }
+      if (typeof this.state.shieldBroken !== 'boolean')    this.state.shieldBroken = false;
+      if (typeof this.state.shieldBrokenAt !== 'number')   this.state.shieldBrokenAt = 0;
+      if (typeof this.state.shieldLastDamageAt !== 'number') this.state.shieldLastDamageAt = Date.now();
     }
 
     // Asegurar campos de combate si viene de un save viejo
@@ -220,7 +237,10 @@ const Game = {
         'color:#00ffe1;font-weight:600',
         '\nDev:  Game.devSetEra(0..11)       → saltar a una era',
         '\n      Game.devGiveCU(n)           → otorgar CU para probar prestige',
-        '\n      Game.devGiveAllWeapons()    → las 14 armas al inventario',
+        '\n      Game.devGiveAllWeapons()    → las 26 armas al inventario',
+        '\n      Game.devGiveFragments(id,n) → fragmentos de un arma',
+        '\n      Game.devForceDropNext(id)   → fuerza drop en próximo kill',
+        '\n      Game.devSetDropLuck(true)   → todos los enemigos dropean',
         '\n      Game.devGiveWeapon("id")    → una arma específica',
         '\n      Game.devEquip("id", 1|2|3)  → equipar en slot',
         '\n      Game.devListWeapons()       → listar IDs de armas',
@@ -285,14 +305,39 @@ const Game = {
     }
   },
 
-  // Dev: agrega las 14 armas al inventario.
+  // Dev: agrega las 26 armas al inventario.
   devGiveAllWeapons() {
     for (const id of Object.keys(WEAPON_DEFS)) {
       if (!this.state.weaponInventory.includes(id)) {
         this.state.weaponInventory.push(id);
       }
     }
-    console.log('[Dev] Inventario con las 14 armas:', this.state.weaponInventory);
+    console.log('[Dev] Inventario con las 26 armas:', this.state.weaponInventory);
+  },
+
+  // Dev: agrega fragmentos de un arma.
+  devGiveFragments(weaponId, count) {
+    if (!WEAPON_DEFS[weaponId]) {
+      console.warn('ID inválido. Usa Game.devListWeapons() para ver los IDs válidos.');
+      return;
+    }
+    if (!this.state.fragments) this.state.fragments = {};
+    this.state.fragments[weaponId] = (this.state.fragments[weaponId] || 0) + (count || 1);
+    console.log('[Dev] Fragmentos de', weaponId, ':', this.state.fragments[weaponId]);
+  },
+
+  // Dev: fuerza que el próximo enemigo dropee el arma indicada.
+  // full=true → arma completa; full=false → fragmentos.
+  devForceDropNext(weaponId, full = false) {
+    if (!WEAPON_DEFS[weaponId]) { console.warn('ID inválido'); return; }
+    Combat._forcedNextDrop = { weaponId, full };
+    console.log('[Dev] Próximo drop forzado:', weaponId, full ? '(arma completa)' : '(fragmentos)');
+  },
+
+  // Dev: activa/desactiva que todos los enemigos dropeen 100%.
+  devSetDropLuck(on) {
+    Combat._dropLuck = !!on;
+    console.log('[Dev] Drop luck:', Combat._dropLuck ? 'ON' : 'OFF');
   },
 
   // Dev: equipa un arma en un slot (1, 2 ó 3).
@@ -307,7 +352,7 @@ const Game = {
       if (this.state.weaponSlots[si] === id) this.state.weaponSlots[si] = null;
     }
     this.state.weaponSlots[slot - 1] = id;
-    if (id === 'campo_fuerza' && !(this.state.shieldMaxHp > 0)) {
+    if (id === 'campo_fuerza') {
       Weapons.initShield(this.state);
     }
     console.log('[Dev] Equipado', id, 'en slot', slot, '→ slots:', this.state.weaponSlots);
@@ -498,6 +543,11 @@ const Game = {
     this.state.eraIndex = idx;
     this.state.maxHp = 100 + idx * 50;
     this.state.hp    = Math.min(this.state.hp, this.state.maxHp);
+    if (this.state.weaponSlots && this.state.weaponSlots.includes('campo_fuerza')) {
+      const newMax = 20 * Math.pow(2.5, idx);
+      this.state.shieldMaxHp = newMax;
+      this.state.shieldHp    = Math.min(this.state.shieldHp || 0, newMax);
+    }
     if (idx > this.state.highestEra) this.state.highestEra = idx;
     Combat.mode     = 'peace';
     Combat.enemies  = [];
