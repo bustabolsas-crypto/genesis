@@ -204,8 +204,8 @@ function eraParams(eraIdx) {
   // V→P 30s, P→A 2.5min, A→M 6.5min, M→C 13.5min, C→O 27.5min,
   // O→E 52.5min, E→Civ 1h45m, Civ→P 2h45m, P→SS 4h30m, SS→G 7h, G→U 10h.
   // La tabla de verificación se imprime en consola al arrancar en dev.
-  const baseDiv  = 9.5;     // divisor base para eras 0-2
-  const ramp     = 1.50;    // ralentización geométrica por era desde startEra
+  const baseDiv  = 10.5;    // divisor base para eras 0-2
+  const ramp     = 1.52;    // ralentización geométrica por era desde startEra
   const startEra = 2;       // el ramp arranca en Átomo (era 2)
   const slowdown = Math.max(1, Math.pow(ramp, eraIdx - startEra));
   return {

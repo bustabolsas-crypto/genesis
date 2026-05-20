@@ -38,7 +38,7 @@ const Balance = {
     36000,    // 10→11 Galaxia → Universo        (10h,      rango 8-12h)
   ],
 
-  // Modelo del jugador: click power escala ×5 por era (igual que en el juego).
+  // Modelo del jugador: click power escala ×2.5 por era (igual que en el juego).
   PLAYER: {
     clickRateEra0:  1.5,   // clicks/seg en era 0 (sin generadores)
     clickRateAfter: 0.2,   // clicks/seg ocasionales con generadores activos
@@ -68,8 +68,8 @@ const Balance = {
       }
       eps *= P.multiplier;
 
-      // 2) Click power escala ×5 por era (igual que Game.computeClickValue).
-      const clickPower = Math.pow(5, eraIdx);
+      // 2) Click power escala ×2.5 por era (igual que Game.computeClickValue).
+      const clickPower = Math.pow(2.5, eraIdx);
       const clickRate  = eraIdx === 0 ? P.clickRateEra0 : P.clickRateAfter;
 
       // 3) Avance del tiempo y de la energía.

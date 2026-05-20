@@ -52,7 +52,7 @@ const TYPE_MULT = {
   b:     { hp: 0.5,  damage: 0.75, speed: 1.5, coinsMult: 1  },
   c:     { hp: 2.0,  damage: 1.25, speed: 0.5, coinsMult: 1  },
   elite: { hp: 6.0,  damage: 1.75, speed: 0.7, coinsMult: 5  },
-  boss:  { hp: 30.0, damage: 3.0,  speed: 0.4, coinsMult: 20 },
+  boss:  { hp: 60.0, damage: 3.0,  speed: 0.4, coinsMult: 20 },
 };
 
 function eraScale(stat, n) {

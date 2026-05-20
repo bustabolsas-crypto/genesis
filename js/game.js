@@ -415,7 +415,7 @@ const Game = {
   // - powerClickMult: reservado para futuro upgrade "Power Click".
   // - buff: multiplicador de power-ups activos.
   computeClickValue() {
-    const eraBase = Math.pow(5, this.state.eraIndex);
+    const eraBase = Math.pow(2.5, this.state.eraIndex);
     const base = (eraBase + (this.state.baseClick - 1)) * this.state.clickMultiplier;
     return base * (this.state.powerClickMult || 1) * this.getBuffMultiplier();
   },

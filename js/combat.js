@@ -99,7 +99,7 @@ const Combat = {
     } else if (this.mode === 'wave') {
       if (!this.enemies.some(e => e.alive)) {
         this.mode = 'peace';
-        this.peaceTimer = 30 + Math.random() * 30;
+        this.peaceTimer = 20 + Math.random() * 20;
       }
     }
   },
@@ -108,10 +108,10 @@ const Combat = {
   startWave(eraIdx) {
     this.mode = 'wave';
     this.enemies = [];
-    const count = 3 + Math.floor(Math.random() * 3);
+    const count = 5 + Math.floor(Math.random() * 4);
     const W = Visuals.width, H = Visuals.height;
     const types = ['a', 'b', 'c'];
-    const eliteSlot = Math.random() < 0.15 ? Math.floor(Math.random() * count) : -1;
+    const eliteSlot = Math.random() < 0.25 ? Math.floor(Math.random() * count) : -1;
 
     for (let i = 0; i < count; i++) {
       const type = i === eliteSlot ? 'elite' : types[i % 3];
