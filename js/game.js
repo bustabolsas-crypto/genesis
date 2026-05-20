@@ -58,6 +58,11 @@ function createInitialState() {
     shieldBroken:      false,
     shieldBrokenAt:    0,
     shieldLastDamageAt: 0,
+    // Segunda capa (E4+)
+    shieldHp2:         0,
+    shieldMaxHp2:      0,
+    shieldBroken2:     false,
+    shieldBrokenAt2:   0,
 
     // -------- Settings & tutorial --------
     soundEnabled: false,
@@ -265,6 +270,7 @@ const Game = {
         '\n      Game.devGivePoints(n)        → otorgar puntos de evolución 🌀',
         '\n      Game.devSetEvolution(id,n)   → evolución E0-E5 de un arma',
         '\n      Game.devMaxEvolveAll()       → todas las armas del inv a L20/E5',
+        '\n      Game.devTestEvolution("id") → arma a L20/E5 y equipa en slot 1',
         '\n      Game.devGiveWeapon("id")    → una arma específica',
         '\n      Game.devEquip("id", 1|2|3)  → equipar en slot',
         '\n      Game.devListWeapons()       → listar IDs de armas',
@@ -440,6 +446,35 @@ const Game = {
       this.state.shieldMaxHp = shEff.shieldMaxHp;
     }
     console.log('[Dev] Todas las armas del inventario a L20 / E5.');
+  },
+
+  // Dev: pone el arma en L20/E5 y la equipa en slot 1 para testing rápido.
+  devTestEvolution(weaponId) {
+    if (!WEAPON_DEFS[weaponId]) {
+      console.warn('[Dev] ID inválido:', weaponId, '— usa Game.devListWeapons()');
+      return;
+    }
+    if (!this.state.weaponInventory) this.state.weaponInventory = [];
+    if (!this.state.weaponLevels) this.state.weaponLevels = {};
+    if (!this.state.weaponEvolutions) this.state.weaponEvolutions = {};
+    if (!Array.isArray(this.state.weaponSlots) || this.state.weaponSlots.length !== 3) {
+      this.state.weaponSlots = [null, null, null];
+    }
+    if (!this.state.weaponInventory.includes(weaponId)) {
+      this.state.weaponInventory.push(weaponId);
+    }
+    // Limpiar el arma de cualquier slot previo
+    for (let si = 0; si < 3; si++) {
+      if (this.state.weaponSlots[si] === weaponId) this.state.weaponSlots[si] = null;
+    }
+    this.state.weaponLevels[weaponId]     = 20;
+    this.state.weaponEvolutions[weaponId] = 5;
+    this.state.weaponSlots[0]             = weaponId;
+    if (weaponId === 'campo_fuerza') {
+      Weapons.initShield(this.state);
+    }
+    Weapons.slotTimers[0] = 0;
+    console.log('[Dev] devTestEvolution:', weaponId, '→ L20 / E5 equipado en slot 1');
   },
 
   // Dev: equipa un arma en un slot (1, 2 ó 3).

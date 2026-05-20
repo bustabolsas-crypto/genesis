@@ -194,7 +194,7 @@ const Combat = {
       } else {
         e.attackTimer -= dt * 1000;
         if (e.attackTimer <= 0) {
-          this.damagePlayer(e.damage, state);
+          this.damagePlayer(e.damage, state, e);
           e.attackTimer = e.attackIntervalMs;
         }
         if (e.isBoss) this.tickBossSpecial(e, dt, state);
@@ -416,11 +416,23 @@ const Combat = {
     }
   },
 
-  damagePlayer(amount, state) {
+  damagePlayer(amount, state, attacker = null) {
     // Escudo absorbe primero
     const remaining = Weapons.absorbDamage(amount, state);
+
+    // E3+: pulso devuelve daño al atacante; E5+: reflejo adicional
+    if (remaining < amount && attacker && attacker.alive) {
+      const shEff = Weapons.getEffectiveStats('campo_fuerza', state);
+      const absorbed = amount - remaining;
+      if (shEff.hasPulse) {
+        Combat.damageEnemy(attacker, absorbed * 0.5, false, '#60a5fa');
+      }
+      if (shEff.hasReflect) {
+        Combat.damageEnemy(attacker, amount * 0.3, false, '#a78bfa');
+      }
+    }
+
     if (remaining <= 0) {
-      // Toda la absorción fue por el escudo: flash azul suave + shake leve
       document.body.classList.remove('screen-shake');
       void document.body.offsetWidth;
       document.body.classList.add('screen-shake');

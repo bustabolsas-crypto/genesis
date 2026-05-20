@@ -1542,6 +1542,69 @@ const Arsenal = {
     state.weaponSlots[slotIdx] = null;
   },
 
+  // Devuelve lista de strings con los efectos de evolución activos para mostrar en detalles
+  _evoEffectLines(wid, stage) {
+    if (stage <= 0) return [];
+    const lines = [];
+
+    if (wid === 'campo_fuerza') {
+      const hpStages = Math.min(stage, 2);
+      if (hpStages > 0) lines.push('HP escudo: +' + (hpStages * 50) + '%');
+      if (hpStages > 0) lines.push('Regen: +' + (hpStages * 25) + '%');
+      if (stage >= 3) lines.push('Pulso de daño: 50% del daño absorbido al atacante');
+      if (stage >= 4) lines.push('Segunda capa: escudo secundario activo (50% HP)');
+      if (stage >= 5) lines.push('Reflejo: 30% del daño total al atacante (además del pulso)');
+      return lines;
+    }
+
+    if (wid === 'satelite_orbital') {
+      lines.push('Orbes activos: ' + (1 + stage));
+      if (stage >= 2) lines.push('Velocidad orbital: +20%');
+      if (stage >= 3) lines.push('Radio orbital: +10%');
+      if (stage >= 4) lines.push('Explosión AoE al impactar (radio 40, 50% daño)');
+      if (stage >= 5) lines.push('Estela persistente: daña enemigos que pasen por ella (0.5s)');
+      return lines;
+    }
+
+    if (wid === 'cinturon_asteroides') {
+      lines.push('Asteroides: ' + (3 + stage));
+      if (stage >= 3) lines.push('Tamaño asteroides: +20%');
+      if (stage >= 4) lines.push('Velocidad rotación: +25%');
+      if (stage >= 5) lines.push('Crítico: 25% de probabilidad de ×3 daño');
+      return lines;
+    }
+
+    // Armas regulares
+    const evoType = (typeof EVO_TYPE !== 'undefined' && EVO_TYPE[wid]) || (WEAPON_DEFS[wid] && WEAPON_DEFS[wid].tipo) || '';
+    switch (evoType) {
+      case 'single':
+        lines.push('Velocidad de ataque: −' + (stage * 5) + '% intervalo');
+        break;
+      case 'chain':
+        lines.push('Cadena extendida: +' + stage + ' enemigos adicionales');
+        break;
+      case 'aoe':
+        lines.push('Radio AoE: +' + (stage * 10) + '%');
+        break;
+      case 'dot':
+        lines.push('Daño DoT: +' + (stage * 20) + '%');
+        break;
+      case 'multi': {
+        const extra = Math.floor(stage / 2) + (stage >= 5 ? 1 : 0);
+        if (extra > 0) lines.push('Proyectiles extra: +' + extra);
+        break;
+      }
+      case 'stun':
+        lines.push('Duración aturdimiento: +' + (stage * 0.2).toFixed(1) + 's');
+        break;
+      case 'mixed':
+        lines.push('Radio AoE: +' + (stage * 10) + '%');
+        lines.push('Daño DoT: +' + (stage * 20) + '%');
+        break;
+    }
+    return lines;
+  },
+
   _showDetail(wid, cardEl) {
     const def = WEAPON_DEFS[wid];
     if (!def) return;
@@ -1559,7 +1622,8 @@ const Arsenal = {
     panel.appendChild(h4);
 
     const eff = Weapons.getEffectiveStats(wid, Game.state);
-    const lv = (Game.state.weaponLevels && Game.state.weaponLevels[wid]) || 0;
+    const lv  = (Game.state.weaponLevels && Game.state.weaponLevels[wid]) || 0;
+    const stage = (Game.state.weaponEvolutions && Game.state.weaponEvolutions[wid]) || 0;
     let stats = '';
     if (def.tipo !== 'shield' && def.tipo !== 'orbital' && def.tipo !== 'orbital_secondary') {
       stats += 'Daño: ' + formatNumber(eff.damage);
@@ -1568,19 +1632,22 @@ const Arsenal = {
       if (eff.chainCount) stats += '\nCadena: hasta ' + eff.chainCount + ' enemigos';
       if (eff.range) stats += '\nRadio AoE: ' + Math.round(eff.range) + 'px';
       if (eff.multiCount) stats += '\nProyectiles: ' + eff.multiCount;
-      if (def.stunDuration) stats += '\nAturdimiento: ' + def.stunDuration + 's';
+      const stunDur = eff.stunDuration || def.stunDuration;
+      if (stunDur) stats += '\nAturdimiento: ' + stunDur.toFixed(1) + 's';
       if (def.knockback) stats += '\nKnockback: sí';
     } else if (def.tipo === 'shield') {
       stats = 'HP escudo: ' + formatNumber(eff.shieldMaxHp)
         + '\nRegen: ' + (eff.regenRate * 100).toFixed(1) + '%/seg (tras 3s sin daño)'
         + '\nCooldown al romperse: ' + (eff.brokenCooldown / 1000) + 's';
     } else if (def.tipo === 'orbital') {
-      stats = 'Daño: ' + formatNumber(eff.damage) + ' por colisión'
-        + '\nVelocidad: ×' + eff.speed.toFixed(2) + ' rad/s'
+      stats = 'Orbes: ' + (eff.orbCount || 1)
+        + '\nDaño: ' + formatNumber(eff.damage) + ' por colisión'
+        + '\nVelocidad: ' + eff.speed.toFixed(2) + ' rad/s'
         + '\nRadio: ' + Math.round(eff.radius) + 'px';
     } else {
-      stats = 'Daño: ' + formatNumber(eff.damage) + ' por colisión'
-        + '\nVelocidad: ×' + eff.speed.toFixed(2) + ' rad/s';
+      stats = 'Asteroides: ' + (eff.astCount || 3)
+        + '\nDaño: ' + formatNumber(eff.damage) + ' por colisión'
+        + '\nVelocidad: ' + eff.speed.toFixed(2) + ' rad/s';
     }
     if (lv > 0) stats += '\n— Nivel ' + lv + ' —';
 
@@ -1594,6 +1661,32 @@ const Arsenal = {
     statsPre.style.cssText = 'font-family:var(--font-mono);font-size:10px;color:var(--text);white-space:pre-line;margin:0';
     statsPre.textContent = stats;
     panel.appendChild(statsPre);
+
+    // Sección de evolución activa
+    if (stage > 0) {
+      const evoLines = this._evoEffectLines(wid, stage);
+      if (evoLines.length > 0) {
+        const tc = TIER_COLORS[def.tier] || '#fff';
+        const evoSec = document.createElement('div');
+        evoSec.style.cssText = 'margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.1)';
+
+        const evoTitle = document.createElement('div');
+        evoTitle.style.cssText = 'font-size:10px;font-weight:700;color:' + tc + ';margin-bottom:4px;letter-spacing:0.05em';
+        evoTitle.textContent = 'EVOLUCIÓN E' + stage;
+        evoSec.appendChild(evoTitle);
+
+        const ul = document.createElement('ul');
+        ul.style.cssText = 'margin:0;padding-left:14px;font-size:10px;color:var(--text);list-style-type:disc';
+        for (const line of evoLines) {
+          const li = document.createElement('li');
+          li.textContent = line;
+          li.style.marginBottom = '2px';
+          ul.appendChild(li);
+        }
+        evoSec.appendChild(ul);
+        panel.appendChild(evoSec);
+      }
+    }
 
     // Insertar después del card en el grid
     cardEl.after(panel);
