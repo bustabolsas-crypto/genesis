@@ -255,6 +255,15 @@ const TIER_FRAGMENTS = {
   universal:  5000,
 };
 
+const TIER_BASE_COST = {
+  cuantica:   50,
+  molecular:  200,
+  organica:   1000,
+  planetaria: 5000,
+  galactica:  30000,
+  universal:  200000,
+};
+
 // Pesos por era: [tier, probabilidad%]
 const DROP_TIER_WEIGHTS = [
   [['cuantica',95],['molecular',5]],                                                         // era 0
@@ -300,15 +309,69 @@ const Weapons = {
   ASTEROID_SPEED:  Math.PI,   // 360° cada 2s (más rápido que orbital 4s)
   activeEffects: [],           // efectos visuales en curso
 
+  // Calcula stats efectivos (nivel + era) para cualquier arma.
+  getEffectiveStats(wid, state) {
+    const def = WEAPON_DEFS[wid];
+    if (!def) return {};
+    const level    = (state.weaponLevels && state.weaponLevels[wid]) || 0;
+    const eraIdx   = state.eraIndex;
+    const eraScale = Math.pow(5, eraIdx);
+    const ms       = Math.floor(level / 5);   // hitos cada 5 niveles
+
+    if (def.tipo === 'shield') {
+      return {
+        shieldMaxHp:    20 * Math.pow(2.5, eraIdx) * (1 + level * 0.20),
+        regenRate:      0.05 * (1 + ms * 0.50),
+        brokenCooldown: level >= 20 ? 20000 : 30000,
+      };
+    }
+    if (def.tipo === 'orbital') {
+      return {
+        damage: 8  * eraScale * (1 + level * 0.15),
+        speed:  (Math.PI * 2 / 4) * (1 + ms * 0.10),
+        radius: 90 * (1 + ms * 0.05),
+      };
+    }
+    if (def.tipo === 'orbital_secondary') {
+      return {
+        damage: 3 * eraScale * (1 + level * 0.15),
+        speed:  Math.PI * (1 + ms * 0.10),
+      };
+    }
+
+    // Armas regulares
+    const s = {
+      damage:         def.damage * (1 + level * 0.10) * eraScale,
+      attackInterval: def.attackInterval,
+      range:          def.range,
+      dotDps:         def.dotDps != null ? def.dotDps * eraScale : undefined,
+      chainCount:     def.chainCount,
+      multiCount:     def.multiCount,
+    };
+    const tipo = def.tipo;
+    if (tipo === 'single')                                   s.attackInterval = def.attackInterval * Math.pow(0.9, ms);
+    if (tipo === 'chain')                                    s.chainCount     = (def.chainCount || 3) + ms;
+    if (tipo === 'aoe' || tipo === 'aoe_dot' || tipo === 'attract_aoe_dot')
+                                                             s.range          = (def.range || 60) * (1 + ms * 0.10);
+    if (tipo === 'dot' || tipo === 'aoe_dot' || tipo === 'attract_aoe_dot')
+                                                             s.dotDps         = (def.dotDps || 0) * (1 + ms * 0.20) * eraScale;
+    if (tipo === 'multi')                                    s.multiCount     = (def.multiCount || 3) + ms;
+    if (tipo === 'multi_aoe') {
+      s.multiCount = (def.multiCount || 4) + ms;
+      s.range      = (def.range || 40) * (1 + ms * 0.10);
+    }
+    return s;
+  },
+
   // Inicializa o recalcula el escudo para la era actual.
   // Escala ×2.5/era. Capea HP al nuevo máximo; nunca sube HP por encima del cap.
   initShield(state) {
-    const mult = Math.pow(2.5, state.eraIndex);
-    state.shieldMaxHp = 20 * mult;
+    const eff = this.getEffectiveStats('campo_fuerza', state);
+    state.shieldMaxHp = eff.shieldMaxHp;
     if (!(state.shieldHp > 0)) {
-      state.shieldHp = state.shieldMaxHp;       // primer equip: llenar al máximo
+      state.shieldHp = state.shieldMaxHp;
     } else {
-      state.shieldHp = Math.min(state.shieldHp, state.shieldMaxHp); // re-equip: capear
+      state.shieldHp = Math.min(state.shieldHp, state.shieldMaxHp);
     }
     state.shieldBroken       = false;
     state.shieldBrokenAt     = 0;
@@ -352,25 +415,23 @@ const Weapons = {
     // ── Campo de Fuerza ──
     const shieldEquipped = slots.includes('campo_fuerza');
     if (shieldEquipped) {
+      const shEff = this.getEffectiveStats('campo_fuerza', state);
       if (state.shieldBroken) {
-        if ((Date.now() - state.shieldBrokenAt) >= 30000) {
-          const mult = Math.pow(2.5, eraIdx);
-          state.shieldMaxHp        = 20 * mult;
+        if ((Date.now() - state.shieldBrokenAt) >= shEff.brokenCooldown) {
+          state.shieldMaxHp        = shEff.shieldMaxHp;
           state.shieldHp           = state.shieldMaxHp;
           state.shieldBroken       = false;
           state.shieldBrokenAt     = 0;
           state.shieldLastDamageAt = Date.now();
         }
       } else {
-        // Inicializar si aún no tiene HP
         if (!(state.shieldMaxHp > 0)) this.initShield(state);
-        // Regenerar 5%/seg pasados 3s sin recibir daño
         if (state.shieldHp < state.shieldMaxHp) {
           const timeSince = (Date.now() - (state.shieldLastDamageAt || 0)) / 1000;
           if (timeSince >= 3) {
             state.shieldHp = Math.min(
               state.shieldMaxHp,
-              state.shieldHp + state.shieldMaxHp * 0.05 * dt
+              state.shieldHp + state.shieldMaxHp * shEff.regenRate * dt
             );
           }
         }
@@ -379,14 +440,16 @@ const Weapons = {
 
     // ── Satélite Orbital ──
     if (slots.includes('satelite_orbital')) {
-      this.orbitalAngle = (this.orbitalAngle + (Math.PI * 2 / 4) * dt) % (Math.PI * 2);
+      const orbEff = this.getEffectiveStats('satelite_orbital', state);
+      this.orbitalAngle = (this.orbitalAngle + orbEff.speed * dt) % (Math.PI * 2);
       const cx = Visuals.width  / 2;
       const cy = Visuals.height / 2;
-      const ox = cx + Math.cos(this.orbitalAngle) * this.ORBITAL_RADIUS;
-      const oy = cy + Math.sin(this.orbitalAngle) * this.ORBITAL_RADIUS;
+      const orbR = orbEff.radius;
+      const ox = cx + Math.cos(this.orbitalAngle) * orbR;
+      const oy = cy + Math.sin(this.orbitalAngle) * orbR;
       this.orbitalPos = { x: ox, y: oy };
 
-      const orbDamage = 8 * Math.pow(5, eraIdx);
+      const orbDamage = orbEff.damage;
       const now = Date.now();
       for (const e of enemies) {
         if (!e.alive) continue;
@@ -408,10 +471,11 @@ const Weapons = {
 
     // ── Cinturón de Asteroides ──
     if (slots.includes('cinturon_asteroides')) {
-      this.asteroidAngle = (this.asteroidAngle + this.ASTEROID_SPEED * dt) % (Math.PI * 2);
+      const astEff = this.getEffectiveStats('cinturon_asteroides', state);
+      this.asteroidAngle = (this.asteroidAngle + astEff.speed * dt) % (Math.PI * 2);
       const cxa = Visuals.width  / 2;
       const cya = Visuals.height / 2;
-      const astDamage = 3 * Math.pow(5, eraIdx);
+      const astDamage = astEff.damage;
       const nowA = Date.now();
       this.asteroidPositions = [];
       for (let i = 0; i < 3; i++) {
@@ -447,10 +511,11 @@ const Weapons = {
       const def = WEAPON_DEFS[wid];
       if (!def || def.tipo === 'shield' || def.tipo === 'orbital' || def.tipo === 'orbital_secondary') continue;
 
+      const eff = this.getEffectiveStats(wid, state);
       this.slotTimers[si] = (this.slotTimers[si] || 0) - dt * 1000;
       if (this.slotTimers[si] <= 0) {
-        this.slotTimers[si] = def.attackInterval;
-        this._fireWeapon(def, enemies, eraIdx);
+        this.slotTimers[si] = eff.attackInterval;
+        this._fireWeapon(def, enemies, state);
       }
     }
 
@@ -461,16 +526,15 @@ const Weapons = {
     });
   },
 
-  _fireWeapon(def, enemies, eraIdx) {
+  _fireWeapon(def, enemies, state) {
     const alive = enemies.filter(e => e.alive);
     if (!alive.length) return;
 
-    const eraScale = Math.pow(5, eraIdx);
-    const damage   = def.damage * eraScale;
+    const eff    = this.getEffectiveStats(def.id, state);
+    const damage = eff.damage;
     const cx = Visuals.width  / 2;
     const cy = Visuals.height / 2;
 
-    // Prioridad: boss → primer vivo
     let target = alive.find(e => e.isBoss) || alive[0];
 
     switch (def.tipo) {
@@ -492,7 +556,7 @@ const Weapons = {
       }
 
       case 'chain': {
-        const maxChain = def.chainCount || 3;
+        const maxChain = eff.chainCount || 3;
         const points   = [{ x: cx, y: cy }];
         const hitSet   = new Set();
         let current    = target;
@@ -501,7 +565,6 @@ const Weapons = {
           Combat.damageEnemy(current, damage, false, def.color);
           hitSet.add(current);
           points.push({ x: current.x, y: current.y });
-          // Siguiente objetivo: vivo, no golpeado, más cercano
           let next = null, minD = Infinity;
           for (const e of alive) {
             if (hitSet.has(e)) continue;
@@ -521,7 +584,7 @@ const Weapons = {
       }
 
       case 'aoe': {
-        const r = def.range || 60;
+        const r = eff.range || 60;
         for (const e of alive) {
           const dx = e.x - cx, dy = e.y - cy;
           if (Math.sqrt(dx * dx + dy * dy) <= r) {
@@ -547,7 +610,7 @@ const Weapons = {
       }
 
       case 'multi': {
-        const mCount = def.multiCount || 3;
+        const mCount = eff.multiCount || 3;
         const pool = [...alive];
         const targets = [];
         const bossI = pool.findIndex(e => e.isBoss);
@@ -570,8 +633,8 @@ const Weapons = {
       }
 
       case 'multi_aoe': {
-        const mCount = def.multiCount || 4;
-        const r = def.range || 40;
+        const mCount = eff.multiCount || 4;
+        const r = eff.range || 40;
         const pool = [...alive];
         const targets = [];
         const bossI = pool.findIndex(e => e.isBoss);
@@ -600,9 +663,8 @@ const Weapons = {
       }
 
       case 'attract_aoe_dot': {
-        const r = def.range || 250;
+        const r      = eff.range || 250;
         const attractR = def.attractRange || (r + 50);
-        // Atraer enemigos hacia el centro
         for (const e of alive) {
           const dx = cx - e.x, dy = cy - e.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
@@ -612,17 +674,12 @@ const Weapons = {
             e.y += (dy / dist) * pull;
           }
         }
-        // AoE daño + DoT
         for (const e of alive) {
           const dx = e.x - cx, dy = e.y - cy;
           if (Math.sqrt(dx * dx + dy * dy) <= r) {
             Combat.damageEnemy(e, damage, false, def.color);
             if (!e.dots) e.dots = [];
-            e.dots.push({
-              dps: def.dotDps * eraScale,
-              remaining: def.dotDuration || 4,
-              color: def.color,
-            });
+            e.dots.push({ dps: eff.dotDps, remaining: def.dotDuration || 4, color: def.color });
           }
         }
         this.activeEffects.push({
@@ -635,11 +692,7 @@ const Weapons = {
       case 'dot': {
         Combat.damageEnemy(target, damage, false, def.color);
         if (!target.dots) target.dots = [];
-        target.dots.push({
-          dps: def.dotDps * eraScale,
-          remaining: def.dotDuration || 5,
-          color: def.color,
-        });
+        target.dots.push({ dps: eff.dotDps, remaining: def.dotDuration || 5, color: def.color });
         this.activeEffects.push({
           type: 'beam',
           x1: cx, y1: cy, x2: target.x, y2: target.y,
@@ -651,18 +704,14 @@ const Weapons = {
       }
 
       case 'aoe_dot': {
-        const r = def.range || 100;
+        const r = eff.range || 100;
         const persist = def.id === 'espora_toxica' ? 1.0 : 0.5;
         for (const e of alive) {
           const dx = e.x - cx, dy = e.y - cy;
           if (Math.sqrt(dx * dx + dy * dy) <= r) {
             Combat.damageEnemy(e, damage, false, def.color);
             if (!e.dots) e.dots = [];
-            e.dots.push({
-              dps: def.dotDps * eraScale,
-              remaining: def.dotDuration || 4,
-              color: def.color,
-            });
+            e.dots.push({ dps: eff.dotDps, remaining: def.dotDuration || 4, color: def.color });
           }
         }
         this.activeEffects.push({

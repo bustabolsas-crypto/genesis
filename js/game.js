@@ -48,6 +48,7 @@ function createInitialState() {
     weaponInventory: ['pulso_cuantico'],   // IDs que posee el jugador
     weaponSlots:     ['pulso_cuantico', null, null],  // 3 slots equipados
     fragments:       {},                  // { weapon_id: count }
+    weaponLevels:    {},                  // { weapon_id: level 0-20 }
     // Shield (Campo de Fuerza)
     shieldHp:          0,
     shieldMaxHp:       0,
@@ -149,6 +150,11 @@ const Game = {
         || Array.isArray(this.state.fragments)) {
       this.state.fragments = {};
     }
+    // Normalizar weaponLevels
+    if (!this.state.weaponLevels || typeof this.state.weaponLevels !== 'object'
+        || Array.isArray(this.state.weaponLevels)) {
+      this.state.weaponLevels = {};
+    }
     // Normalizar: eliminar del inventario IDs que ya no existen
     this.state.weaponInventory = this.state.weaponInventory.filter(
       id => id === 'pulso_cuantico' || id in WEAPON_DEFS
@@ -165,7 +171,8 @@ const Game = {
     // Siempre recalculamos shieldMaxHp desde la fórmula actual para que saves
     // viejos (con una fórmula anterior) no queden con un valor fijo incorrecto.
     if (this.state.weaponSlots.includes('campo_fuerza')) {
-      const shieldMax = 20 * Math.pow(2.5, this.state.eraIndex);
+      const shEff = Weapons.getEffectiveStats('campo_fuerza', this.state);
+      const shieldMax = shEff.shieldMaxHp;
       this.state.shieldMaxHp = shieldMax;
       if (!(this.state.shieldHp > 0)) {
         this.state.shieldHp = shieldMax;
@@ -241,6 +248,9 @@ const Game = {
         '\n      Game.devGiveFragments(id,n) → fragmentos de un arma',
         '\n      Game.devForceDropNext(id)   → fuerza drop en próximo kill',
         '\n      Game.devSetDropLuck(true)   → todos los enemigos dropean',
+        '\n      Game.devSetWeaponLevel(id,n) → nivel upgrade de un arma',
+        '\n      Game.devGiveCoins(n)         → otorgar monedas',
+        '\n      Game.devMaxAllWeapons()      → todas las armas del inv a nivel 20',
         '\n      Game.devGiveWeapon("id")    → una arma específica',
         '\n      Game.devEquip("id", 1|2|3)  → equipar en slot',
         '\n      Game.devListWeapons()       → listar IDs de armas',
@@ -338,6 +348,38 @@ const Game = {
   devSetDropLuck(on) {
     Combat._dropLuck = !!on;
     console.log('[Dev] Drop luck:', Combat._dropLuck ? 'ON' : 'OFF');
+  },
+
+  // Dev: establece el nivel de upgrade de un arma (0-20).
+  devSetWeaponLevel(weaponId, level) {
+    if (!WEAPON_DEFS[weaponId]) { console.warn('ID inválido'); return; }
+    if (!this.state.weaponLevels) this.state.weaponLevels = {};
+    const clamped = Math.max(0, Math.min(20, level || 0));
+    this.state.weaponLevels[weaponId] = clamped;
+    if (weaponId === 'campo_fuerza') {
+      const shEff = Weapons.getEffectiveStats('campo_fuerza', this.state);
+      this.state.shieldMaxHp = shEff.shieldMaxHp;
+    }
+    console.log('[Dev] Nivel de', weaponId, 'ahora:', clamped);
+  },
+
+  // Dev: otorga monedas.
+  devGiveCoins(amount) {
+    this.state.coins = (this.state.coins || 0) + (amount || 0);
+    console.log('[Dev] Monedas ahora:', this.state.coins);
+  },
+
+  // Dev: pone todas las armas del inventario a nivel 20.
+  devMaxAllWeapons() {
+    if (!this.state.weaponLevels) this.state.weaponLevels = {};
+    for (const id of this.state.weaponInventory) {
+      this.state.weaponLevels[id] = 20;
+    }
+    if (this.state.weaponSlots && this.state.weaponSlots.includes('campo_fuerza')) {
+      const shEff = Weapons.getEffectiveStats('campo_fuerza', this.state);
+      this.state.shieldMaxHp = shEff.shieldMaxHp;
+    }
+    console.log('[Dev] Todas las armas del inventario a nivel 20.');
   },
 
   // Dev: equipa un arma en un slot (1, 2 ó 3).
@@ -544,9 +586,9 @@ const Game = {
     this.state.maxHp = 100 + idx * 50;
     this.state.hp    = Math.min(this.state.hp, this.state.maxHp);
     if (this.state.weaponSlots && this.state.weaponSlots.includes('campo_fuerza')) {
-      const newMax = 20 * Math.pow(2.5, idx);
-      this.state.shieldMaxHp = newMax;
-      this.state.shieldHp    = Math.min(this.state.shieldHp || 0, newMax);
+      const shEff = Weapons.getEffectiveStats('campo_fuerza', this.state);
+      this.state.shieldMaxHp = shEff.shieldMaxHp;
+      this.state.shieldHp    = Math.min(this.state.shieldHp || 0, shEff.shieldMaxHp);
     }
     if (idx > this.state.highestEra) this.state.highestEra = idx;
     Combat.mode     = 'peace';

@@ -1633,3 +1633,89 @@ body.screen-shake { animation: screen-shake 0.3s ease both; }
 .forge-flash { animation: forge-flash-anim 0.58s ease-out; }
 .forge-assemble { animation: forge-assemble-anim 0.58s ease-out; }
 .frag-cap-ready { animation: frag-cap-pulse 1.8s ease-in-out infinite; }
+
+/* ---- Weapon upgrade section (D.1) ---- */
+.weapon-upgrade-section {
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.weapon-level-header { margin-bottom: 3px; }
+
+.weapon-level-label {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
+}
+
+.weapon-level-bar {
+  height: 4px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 5px;
+}
+
+.weapon-level-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.weapon-upgrade-btns {
+  display: flex;
+  gap: 3px;
+}
+
+.btn-upgrade {
+  flex: 1;
+  font-size: 8px;
+  padding: 3px 4px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+  border-color: var(--uc, #888);
+  color: var(--uc, #888);
+  background: transparent;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-upgrade:hover:not(:disabled) {
+  background: rgba(255,255,255,0.05);
+  box-shadow: 0 0 6px var(--uc, #888);
+}
+
+.btn-upgrade-disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  color: var(--text-dim) !important;
+  border-color: var(--border) !important;
+}
+
+.weapon-upgrade-lack {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  color: var(--danger);
+  margin-top: 3px;
+}
+
+.weapon-evo-ready {
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: center;
+  margin-top: 4px;
+  animation: evo-ready-pulse 2s ease-in-out infinite;
+}
+
+@keyframes evo-ready-pulse {
+  0%, 100% { opacity: 0.65; }
+  50%       { opacity: 1; }
+}

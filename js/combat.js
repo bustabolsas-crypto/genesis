@@ -429,9 +429,9 @@ const Combat = {
 
     state.hp = state.maxHp = 100 + state.eraIndex * 50;
     if (Array.isArray(state.weaponSlots) && state.weaponSlots.includes('campo_fuerza')) {
-      const newMax = 20 * Math.pow(2.5, state.eraIndex);
-      state.shieldMaxHp = newMax;
-      state.shieldHp    = Math.min(state.shieldHp || 0, newMax);
+      const shEff = Weapons.getEffectiveStats('campo_fuerza', state);
+      state.shieldMaxHp = shEff.shieldMaxHp;
+      state.shieldHp    = Math.min(state.shieldHp || 0, shEff.shieldMaxHp);
     }
     state.debilitationCooldown = 0;
     state.debilitatedUntil     = 0;

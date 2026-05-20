@@ -890,7 +890,8 @@ const Arsenal = {
   },
 
   // ── Puzzle piece SVG (viewBox -6 -6 76 76, cuerpo 8-56) ──
-  _buildPuzzle(wid, owned, tierColor, size) {
+  _buildPuzzle(wid, owned, tierColor, size, level) {
+    const lv = level || 0;
     const svg = _svgEl('svg', {
       width: size, height: size,
       viewBox: '-6 -6 76 76',
@@ -900,7 +901,6 @@ const Arsenal = {
     svg.style.display = 'block';
     if (owned) svg.style.setProperty('--tc', tierColor);
 
-    // Pieza de fondo
     const bg = _svgEl('path', {
       d: 'M 8 8 L 26 8 Q 32 0 38 8 L 56 8 L 56 26 Q 64 32 56 38 L 56 56 L 8 56 Z',
       fill: owned ? tierColor + '28' : tierColor + '10',
@@ -910,7 +910,6 @@ const Arsenal = {
     if (owned) bg.style.filter = `drop-shadow(0 0 5px ${tierColor}66)`;
     svg.appendChild(bg);
 
-    // Ícono del arma
     const iconFn = WEAPON_ICONS[wid];
     if (iconFn) {
       const g = _svgEl('g', {});
@@ -919,8 +918,23 @@ const Arsenal = {
       svg.appendChild(g);
     }
 
-    // Checkmark de poseída
-    if (owned) {
+    if (owned && lv > 0) {
+      // Círculo de nivel — esquina superior derecha del cuerpo
+      const badge = _svgEl('g', {});
+      badge.appendChild(_svgCircle(52, 10, 9, 'none', tierColor));
+      const txt = _svgEl('text', {
+        x: '52', y: '10',
+        'text-anchor': 'middle',
+        'dominant-baseline': 'central',
+        'font-size': '9',
+        'font-weight': '700',
+        fill: '#07070d',
+        'font-family': 'Space Mono, monospace',
+      });
+      txt.textContent = String(lv);
+      badge.appendChild(txt);
+      svg.appendChild(badge);
+    } else if (owned) {
       svg.appendChild(_svgPath('M 44 11 L 50 18 L 60 8', tierColor, 'none', 2.5));
     }
 
@@ -1007,10 +1021,10 @@ const Arsenal = {
 
       if (def) {
         const tierColor = TIER_COLORS[def.tier] || '#fff';
+        const wLevel    = (state.weaponLevels && state.weaponLevels[wid]) || 0;
         card.style.setProperty('--tc', tierColor);
 
-        // Puzzle piece prominente
-        card.appendChild(this._buildPuzzle(wid, true, tierColor, 68));
+        card.appendChild(this._buildPuzzle(wid, true, tierColor, 68, wLevel));
 
         const nameDiv = document.createElement('div');
         nameDiv.className = 'slot-weapon-name';
@@ -1024,20 +1038,21 @@ const Arsenal = {
         tierDiv.style.color = tierColor;
         card.appendChild(tierDiv);
 
+        const slotEff = Weapons.getEffectiveStats(wid, state);
         const statsDiv = document.createElement('div');
         statsDiv.className = 'slot-weapon-stats';
         if (def.tipo !== 'shield' && def.tipo !== 'orbital' && def.tipo !== 'orbital_secondary') {
-          const dmg = def.damage * eraScale;
-          const dps = def.attackInterval ? (dmg / (def.attackInterval / 1000)).toFixed(1) : '—';
+          const dmg = slotEff.damage;
+          const dps = slotEff.attackInterval ? (dmg / (slotEff.attackInterval / 1000)).toFixed(1) : '—';
           statsDiv.textContent = formatNumber(dmg) + ' · ' + dps + ' dps';
         } else if (def.tipo === 'shield') {
-          const shpMax = state.shieldMaxHp || (20 * eraScale);
+          const shpMax = state.shieldMaxHp || slotEff.shieldMaxHp;
           const shpCur = Math.round(state.shieldHp || 0);
           statsDiv.textContent = state.shieldBroken
-            ? '⛔ Roto (30s)'
+            ? '⛔ Roto'
             : shpCur + ' / ' + formatNumber(shpMax) + ' HP';
         } else {
-          statsDiv.textContent = formatNumber(def.damage * eraScale) + ' dmg';
+          statsDiv.textContent = formatNumber(slotEff.damage) + ' dmg';
         }
         card.appendChild(statsDiv);
 
@@ -1132,7 +1147,8 @@ const Arsenal = {
       const body = document.createElement('div');
       body.className = 'weapon-card-body';
 
-      body.appendChild(this._buildPuzzle(wid, owned, tc, 52));
+      const wLevel = (state.weaponLevels && state.weaponLevels[wid]) || 0;
+      body.appendChild(this._buildPuzzle(wid, owned, tc, 52, wLevel));
 
       const info = document.createElement('div');
       info.className = 'weapon-info';
@@ -1159,17 +1175,34 @@ const Arsenal = {
 
       const statsEl = document.createElement('div');
       statsEl.className = 'weapon-card-stats';
-      if (def.tipo !== 'shield' && def.tipo !== 'orbital' && def.tipo !== 'orbital_secondary') {
-        statsEl.textContent = formatNumber(def.damage * eraScale) + ' dmg · ' + (def.attackInterval / 1000).toFixed(1) + 's';
-      } else if (def.tipo === 'shield') {
-        statsEl.textContent = formatNumber(20 * eraScale) + ' HP escudo';
+      if (owned) {
+        const cardEff = Weapons.getEffectiveStats(wid, state);
+        if (def.tipo !== 'shield' && def.tipo !== 'orbital' && def.tipo !== 'orbital_secondary') {
+          const dps = cardEff.attackInterval ? (cardEff.damage / (cardEff.attackInterval / 1000)).toFixed(1) : '—';
+          statsEl.textContent = formatNumber(cardEff.damage) + ' dmg · ' + dps + ' dps';
+        } else if (def.tipo === 'shield') {
+          statsEl.textContent = formatNumber(cardEff.shieldMaxHp) + ' HP escudo';
+        } else {
+          statsEl.textContent = formatNumber(cardEff.damage) + ' dmg/col.';
+        }
       } else {
-        statsEl.textContent = formatNumber(def.damage * eraScale) + ' dmg/col.';
+        if (def.tipo !== 'shield' && def.tipo !== 'orbital' && def.tipo !== 'orbital_secondary') {
+          statsEl.textContent = formatNumber(def.damage * eraScale) + ' dmg · ' + (def.attackInterval / 1000).toFixed(1) + 's';
+        } else if (def.tipo === 'shield') {
+          statsEl.textContent = formatNumber(20 * eraScale) + ' HP escudo';
+        } else {
+          statsEl.textContent = formatNumber(def.damage * eraScale) + ' dmg/col.';
+        }
       }
       info.appendChild(statsEl);
 
       // Barra de fragmentos o estado
       info.appendChild(this._buildFragRow(wid, have, required, tc, owned, equipped));
+
+      // Sección de upgrade (solo armas poseídas)
+      if (owned) {
+        info.appendChild(this._buildUpgradeSection(wid, def, state, tc));
+      }
 
       body.appendChild(info);
       card.appendChild(body);
@@ -1215,6 +1248,114 @@ const Arsenal = {
 
     container.appendChild(grid);
     return container;
+  },
+
+  // ── Upgrade helpers ──
+  _upgradeCost(tier, currentLevel) {
+    return Math.round((TIER_BASE_COST[tier] || 50) * Math.pow(1.5, currentLevel));
+  },
+
+  _makeUpgradeBtn(label, tc, canAfford, onClick) {
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-upgrade' + (canAfford ? '' : ' btn-upgrade-disabled');
+    btn.style.setProperty('--uc', tc);
+    btn.disabled = !canAfford;
+    btn.textContent = label;
+    if (canAfford) {
+      btn.addEventListener('click', (ev) => { ev.stopPropagation(); onClick(); });
+    }
+    return btn;
+  },
+
+  _doUpgrade(wid, levels, state) {
+    if (!state.weaponLevels) state.weaponLevels = {};
+    const def = WEAPON_DEFS[wid];
+    if (!def) return;
+    let lv = state.weaponLevels[wid] || 0;
+    const maxLv = 20;
+    for (let i = 0; i < levels; i++) {
+      if (lv >= maxLv) break;
+      const cost = this._upgradeCost(def.tier, lv);
+      if ((state.coins || 0) < cost) break;
+      state.coins -= cost;
+      lv++;
+    }
+    state.weaponLevels[wid] = lv;
+    if (wid === 'campo_fuerza') {
+      const eff = Weapons.getEffectiveStats('campo_fuerza', state);
+      state.shieldMaxHp = eff.shieldMaxHp;
+      if (state.shieldHp > state.shieldMaxHp) state.shieldHp = state.shieldMaxHp;
+    }
+    this._refresh();
+  },
+
+  _buildUpgradeSection(wid, def, state, tc) {
+    const MAX_LV = 20;
+    const lv    = (state.weaponLevels && state.weaponLevels[wid]) || 0;
+    const coins = state.coins || 0;
+
+    const sec = document.createElement('div');
+    sec.className = 'weapon-upgrade-section';
+
+    // Header: nivel + barra
+    const hdr = document.createElement('div');
+    hdr.className = 'weapon-level-header';
+    const lbl = document.createElement('span');
+    lbl.className = 'weapon-level-label';
+    lbl.textContent = 'Nv ' + lv + ' / ' + MAX_LV;
+    if (lv >= MAX_LV) lbl.style.color = tc;
+    hdr.appendChild(lbl);
+    sec.appendChild(hdr);
+
+    const barTrack = document.createElement('div');
+    barTrack.className = 'weapon-level-bar';
+    const barFill = document.createElement('div');
+    barFill.className = 'weapon-level-bar-fill';
+    barFill.style.width = (lv / MAX_LV * 100).toFixed(1) + '%';
+    barFill.style.background = `linear-gradient(90deg,${tc},${tc}88)`;
+    barTrack.appendChild(barFill);
+    sec.appendChild(barTrack);
+
+    if (lv >= MAX_LV) {
+      const evo = document.createElement('div');
+      evo.className = 'weapon-evo-ready';
+      evo.style.color = tc;
+      evo.textContent = 'Listo para evolución';
+      sec.appendChild(evo);
+      return sec;
+    }
+
+    const cost1 = this._upgradeCost(def.tier, lv);
+    const can1  = coins >= cost1;
+
+    const lv10   = Math.min(10, MAX_LV - lv);
+    let cost10 = 0;
+    for (let i = 0; i < lv10; i++) cost10 += this._upgradeCost(def.tier, lv + i);
+    const can10 = lv10 > 0 && coins >= cost10;
+
+    let lvMax = 0, costMax = 0, rem = coins;
+    for (let i = lv; i < MAX_LV; i++) {
+      const c = this._upgradeCost(def.tier, i);
+      if (rem < c) break;
+      rem -= c; costMax += c; lvMax++;
+    }
+    const canMax = lvMax > 0;
+
+    const row = document.createElement('div');
+    row.className = 'weapon-upgrade-btns';
+    row.appendChild(this._makeUpgradeBtn('×1 ✦' + formatNumber(cost1),         tc, can1,  () => this._doUpgrade(wid, 1,    state)));
+    row.appendChild(this._makeUpgradeBtn('×' + lv10 + ' ✦' + formatNumber(cost10), tc, can10, () => this._doUpgrade(wid, lv10, state)));
+    row.appendChild(this._makeUpgradeBtn('Max ✦' + formatNumber(costMax),      tc, canMax, () => this._doUpgrade(wid, lvMax, state)));
+    sec.appendChild(row);
+
+    if (!can1) {
+      const lack = document.createElement('div');
+      lack.className = 'weapon-upgrade-lack';
+      lack.textContent = 'Faltan ' + formatNumber(cost1 - coins) + ' ✦';
+      sec.appendChild(lack);
+    }
+
+    return sec;
   },
 
   _forge(wid, cardEl) {
@@ -1282,22 +1423,31 @@ const Arsenal = {
     h4.style.color = TIER_COLORS[def.tier] || '#fff';
     panel.appendChild(h4);
 
-    const eraScale = Math.pow(5, Game.state.eraIndex);
+    const eff = Weapons.getEffectiveStats(wid, Game.state);
+    const lv = (Game.state.weaponLevels && Game.state.weaponLevels[wid]) || 0;
     let stats = '';
-    if (def.tipo !== 'shield' && def.tipo !== 'orbital') {
-      stats += 'Daño: ' + formatNumber(def.damage * eraScale);
-      if (def.attackInterval) stats += ' · Intervalo: ' + (def.attackInterval / 1000).toFixed(1) + 's';
-      if (def.dotDps) stats += '\nDoT: ' + formatNumber(def.dotDps * eraScale) + '/seg × ' + def.dotDuration + 's';
-      if (def.chainCount) stats += '\nCadena: hasta ' + def.chainCount + ' enemigos';
-      if (def.range) stats += '\nRadio AoE: ' + def.range + 'px';
+    if (def.tipo !== 'shield' && def.tipo !== 'orbital' && def.tipo !== 'orbital_secondary') {
+      stats += 'Daño: ' + formatNumber(eff.damage);
+      if (eff.attackInterval) stats += ' · Intervalo: ' + (eff.attackInterval / 1000).toFixed(2) + 's';
+      if (eff.dotDps != null) stats += '\nDoT: ' + formatNumber(eff.dotDps) + '/seg × ' + def.dotDuration + 's';
+      if (eff.chainCount) stats += '\nCadena: hasta ' + eff.chainCount + ' enemigos';
+      if (eff.range) stats += '\nRadio AoE: ' + Math.round(eff.range) + 'px';
+      if (eff.multiCount) stats += '\nProyectiles: ' + eff.multiCount;
       if (def.stunDuration) stats += '\nAturdimiento: ' + def.stunDuration + 's';
       if (def.knockback) stats += '\nKnockback: sí';
     } else if (def.tipo === 'shield') {
-      const shMax = 20 * eraScale;
-      stats = 'HP escudo: ' + formatNumber(shMax) + '\nRegen: 5%/seg (tras 3s sin daño)\nCooldown al romperse: 30s';
+      stats = 'HP escudo: ' + formatNumber(eff.shieldMaxHp)
+        + '\nRegen: ' + (eff.regenRate * 100).toFixed(1) + '%/seg (tras 3s sin daño)'
+        + '\nCooldown al romperse: ' + (eff.brokenCooldown / 1000) + 's';
+    } else if (def.tipo === 'orbital') {
+      stats = 'Daño: ' + formatNumber(eff.damage) + ' por colisión'
+        + '\nVelocidad: ×' + eff.speed.toFixed(2) + ' rad/s'
+        + '\nRadio: ' + Math.round(eff.radius) + 'px';
     } else {
-      stats = 'Daño: ' + formatNumber(8 * eraScale) + ' por colisión\nRotación: 360° cada 4s\nCooldown por enemigo: 1s';
+      stats = 'Daño: ' + formatNumber(eff.damage) + ' por colisión'
+        + '\nVelocidad: ×' + eff.speed.toFixed(2) + ' rad/s';
     }
+    if (lv > 0) stats += '\n— Nivel ' + lv + ' —';
 
     const desc = document.createElement('p');
     desc.style.color = 'var(--text-dim)';
