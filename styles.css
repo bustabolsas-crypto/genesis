@@ -840,7 +840,10 @@ body > * { position: relative; z-index: 1; }
   width: 100%;
   max-width: 480px;
   max-height: calc(100vh - 48px);
-  overflow-y: auto;
+  /* Flex column: body scrolls, actions siempre visibles */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   padding: 28px;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
@@ -868,6 +871,13 @@ body > * { position: relative; z-index: 1; }
   font-size: 14px;
   line-height: 1.65;
   color: var(--text);
+  /* Crece para llenar el modal y hace scroll cuando el contenido no cabe */
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* Compensación visual para que el scrollbar no rompa el padding derecho */
+  padding-right: 4px;
+  margin-right: -4px;
 }
 .modal-body p + p,
 .modal-body p + dl,
@@ -904,6 +914,8 @@ body > * { position: relative; z-index: 1; }
   gap: 10px;
   justify-content: flex-end;
   margin-top: 24px;
+  /* Siempre visible en la parte inferior, aunque el body haga scroll */
+  flex-shrink: 0;
 }
 
 /* dl con clave-valor (modal de Big Bang, settings stats). */

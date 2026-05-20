@@ -5,12 +5,12 @@
 
    Máquina de estados: 'peace' → 'wave' → 'peace' → ... 'boss'
    - peace:  sin enemigos, timer de 30s antes de la ola.
-   - wave:   3-5 enemigos activos; cuando todos mueren → peace.
-   - boss:   un jefe bloquea el avance de era; al morir → advanceEra.
+   - wave:   3-5 enemigos (15% chance de incluir un élite); cuando todos mueren → peace.
+   - boss:   un jefe bloquea el avance de era; invoca 2 minis cada 15s; al morir → advanceEra.
 
    Capas de muerte del jugador:
    1ª: HP → maxHp×0.5, EPS -10% por 60s, cooldown 5min.
-   2ª (dentro de 5min): era-- , energía×0.5, reset combat.
+   2ª (dentro de 5min): era--, energía×0.5, generadores×0.5 (floor), reset combat.
 
    Rendering: se dibuja SOBRE Visuals.render() en el mismo canvas.
    ============================================ */
@@ -19,42 +19,49 @@ const Combat = {
   // Estado de la ola
   mode: 'peace',       // 'peace' | 'wave' | 'boss'
   enemies: [],
-  peaceTimer: 0,       // segundos hasta la próxima ola
+  peaceTimer: 0,
 
   // Números flotantes de daño
   floatingNums: [],    // [{ x, y, text, color, life, maxLife }]
 
-  // Flash de pantalla
+  // Flash de pantalla al recibir daño
   screenFlashAlpha: 0,
   screenFlashR: 255, screenFlashG: 50, screenFlashB: 50,
 
-  // Especial del jefe
+  // Especial del jefe (ataque con windup interruptible)
   bossInterruptClicks: 0,
-  bossSpecialTimer:    10,   // segundos hasta el próximo especial
+  bossSpecialTimer:    10,
   bossWindupActive:    false,
-  bossWindupTimer:     0,    // segundos de margen para interrumpir (1s)
+  bossWindupTimer:     0,
+
+  // Invocación de minis del jefe
+  bossSummonTimer:  15,   // segundos hasta la próxima invocación
+  bossIsCharging:   false, // fase de telegrafiar (1s antes de invocar)
+  bossChargeTimer:  0,
 
   // Previene re-spawn inmediato de boss tras avance de era
   bossSpawnCooldownUntil: 0,
 
   PEACE_INITIAL: 30,
-  ATTACK_RANGE:  55,    // px desde el centro del canvas
+  ATTACK_RANGE:  55,
   BOSS_INTERRUPT_NEEDED: 5,
 
   init() {
-    this.mode     = 'peace';
-    this.enemies  = [];
-    this.floatingNums  = [];
-    this.peaceTimer = this.PEACE_INITIAL;
-    this.bossWindupActive  = false;
-    this.bossSpecialTimer  = 10;
+    this.mode            = 'peace';
+    this.enemies         = [];
+    this.floatingNums    = [];
+    this.peaceTimer      = this.PEACE_INITIAL;
+    this.bossWindupActive    = false;
+    this.bossSpecialTimer    = 10;
     this.bossInterruptClicks = 0;
-    this.screenFlashAlpha  = 0;
+    this.screenFlashAlpha    = 0;
     this.bossSpawnCooldownUntil = 0;
+    this.bossSummonTimer  = 15;
+    this.bossIsCharging   = false;
+    this.bossChargeTimer  = 0;
     Weapons.reset();
   },
 
-  // Punto de entrada del game loop. Modal abierto → pausa total.
   tick(dt, state) {
     if (Modal.isOpen()) return;
 
@@ -65,6 +72,13 @@ const Combat = {
 
     this.updateWave(dt, state);
     this.updateEnemies(dt, state);
+
+    // Invocación del jefe (tick siempre durante modo boss)
+    if (this.mode === 'boss') {
+      const boss = this.enemies.find(e => e.isBoss && e.alive);
+      if (boss) this.tickBossSummon(boss, dt, state.eraIndex);
+    }
+
     Weapons.tick(dt, this.enemies, state.eraIndex);
     this.updateFloatingNums(dt);
 
@@ -73,7 +87,6 @@ const Combat = {
     }
   },
 
-  // Transiciones de la máquina de estados
   updateWave(dt, state) {
     if (this.mode === 'peace') {
       this.peaceTimer -= dt;
@@ -84,29 +97,35 @@ const Combat = {
         this.peaceTimer = 30 + Math.random() * 30;
       }
     }
-    // mode === 'boss': sin timer, espera a que el jefe muera
   },
 
+  // 15% de probabilidad de incluir un élite en la oleada
   startWave(eraIdx) {
     this.mode = 'wave';
     this.enemies = [];
     const count = 3 + Math.floor(Math.random() * 3);
     const W = Visuals.width, H = Visuals.height;
     const types = ['a', 'b', 'c'];
+    const eliteSlot = Math.random() < 0.15 ? Math.floor(Math.random() * count) : -1;
+
     for (let i = 0; i < count; i++) {
-      this.enemies.push(spawnEnemy(eraIdx, types[i % 3], W, H));
+      const type = i === eliteSlot ? 'elite' : types[i % 3];
+      this.enemies.push(spawnEnemy(eraIdx, type, W, H));
     }
     Tutorial.triggerFirstEnemy();
   },
 
-  // Llamado desde Game.checkEraUnlock() cuando la energía cruza el umbral
   requestBossSpawn(eraIdx) {
     this.bossSpawnCooldownUntil = performance.now() + 5000;
+    const boss = spawnEnemy(eraIdx, 'boss', Visuals.width, Visuals.height);
     this.mode    = 'boss';
-    this.enemies = [spawnEnemy(eraIdx, 'boss', Visuals.width, Visuals.height)];
+    this.enemies = [boss];
     this.bossSpecialTimer    = 10;
     this.bossInterruptClicks = 0;
     this.bossWindupActive    = false;
+    this.bossSummonTimer     = 15;
+    this.bossIsCharging      = false;
+    this.bossChargeTimer     = 0;
     Tutorial.triggerFirstBoss();
     UI.showBossWarning(ENEMY_NAMES[Math.min(11, eraIdx)].boss);
   },
@@ -127,7 +146,6 @@ const Combat = {
         e.x += (dx / dist) * e.speed * dt;
         e.y += (dy / dist) * e.speed * dt;
       } else {
-        // En rango de ataque: ataca al jugador
         e.attackTimer -= dt * 1000;
         if (e.attackTimer <= 0) {
           this.damagePlayer(e.damage, state);
@@ -155,6 +173,56 @@ const Combat = {
         UI.showBossWindup();
       }
     }
+  },
+
+  // Ciclo de invocación del jefe: 15s → 1s telegrafiar → 2 minis aparecen
+  tickBossSummon(boss, dt, eraIdx) {
+    if (this.bossIsCharging) {
+      this.bossChargeTimer -= dt;
+      boss.chargeFlash = Math.max(0, 1 - this.bossChargeTimer);   // 0→1 durante el segundo
+      if (this.bossChargeTimer <= 0) {
+        this.bossIsCharging  = false;
+        boss.chargeFlash     = 0;
+        this.bossSummonTimer = 15;
+        for (let i = 0; i < 2; i++) {
+          this.enemies.push(this._spawnMini(boss, eraIdx));
+        }
+      }
+    } else {
+      this.bossSummonTimer -= dt;
+      if (this.bossSummonTimer <= 0) {
+        this.bossIsCharging  = true;
+        this.bossChargeTimer = 1;
+      }
+    }
+  },
+
+  _spawnMini(boss, eraIdx) {
+    const base  = getEnemyDef(eraIdx, 'a');
+    const angle = Math.random() * Math.PI * 2;
+    const d     = boss.radius * 4;
+    return {
+      type:             'mini',
+      name:             base.name,
+      color:            base.color,
+      shape:            base.shape,
+      radius:           8,
+      maxHp:            base.maxHp  * 0.5,
+      hp:               base.maxHp  * 0.5,
+      damage:           base.damage * 0.5,
+      coins:            1,
+      speed:            base.speed  * 1.2,
+      attackIntervalMs: base.attackIntervalMs,
+      x: Math.max(10, Math.min(Visuals.width  - 10, boss.x + Math.cos(angle) * d)),
+      y: Math.max(10, Math.min(Visuals.height - 10, boss.y + Math.sin(angle) * d)),
+      attackTimer:  base.attackIntervalMs,
+      hitFlash:     0,
+      chargeFlash:  0,
+      alive:        true,
+      isBoss:       false,
+      isElite:      false,
+      isMini:       true,
+    };
   },
 
   damageEnemy(enemy, amount, isPlayerClick) {
@@ -187,6 +255,11 @@ const Combat = {
 
     if (enemy.isBoss) {
       this.bossWindupActive = false;
+      this.bossIsCharging   = false;
+      // Marcar todos los minis como muertos antes de que el loop los procese
+      for (const m of this.enemies) {
+        if (m.isMini) m.alive = false;
+      }
       Game.advanceEra();
     }
   },
@@ -222,7 +295,19 @@ const Combat = {
 
   onPlayerRealDeath(state) {
     if (state.eraIndex > 0) state.eraIndex--;
-    state.energy  = Math.floor(state.energy * 0.5);
+    state.energy = Math.floor(state.energy * 0.5);
+
+    // Perder el 50% de cada generador (floor)
+    const genLosses = {};
+    for (const id in state.generators) {
+      const before = state.generators[id] || 0;
+      if (before > 0) {
+        const after = Math.floor(before / 2);
+        if (before - after > 0) genLosses[id] = before - after;
+        state.generators[id] = after;
+      }
+    }
+
     state.hp = state.maxHp = 100 + state.eraIndex * 50;
     state.debilitationCooldown = 0;
     state.debilitatedUntil     = 0;
@@ -230,6 +315,8 @@ const Combat = {
     this.mode      = 'peace';
     this.enemies   = [];
     this.peaceTimer = this.PEACE_INITIAL;
+    this.bossIsCharging = false;
+    this.bossSummonTimer = 15;
     Weapons.reset();
 
     this.screenFlashAlpha = 0.65;
@@ -237,11 +324,10 @@ const Combat = {
 
     Visuals.setEra(state.eraIndex, true);
     UI.showEraNotification('Era perdida', '¡Derrotado!');
-    UI.showDeathModal();
+    UI.showDeathModal({ newEraName: STAGES[state.eraIndex].name, genLosses });
     Game.pauseUntil = performance.now() + 1500;
   },
 
-  // Retorna true si el click impactó a un enemigo (consume el click)
   handleClick(x, y, state) {
     for (const e of this.enemies) {
       if (!e.alive) continue;
@@ -265,10 +351,10 @@ const Combat = {
   },
 
   spawnCoinAnim(ex, ey) {
-    const canvas  = Visuals.canvas;
+    const canvas   = Visuals.canvas;
     const canvRect = canvas.getBoundingClientRect();
-    const screenX = canvRect.left + ex;
-    const screenY = canvRect.top  + ey;
+    const screenX  = canvRect.left + ex;
+    const screenY  = canvRect.top  + ey;
 
     const el = document.createElement('div');
     el.className = 'coin-anim';
@@ -279,7 +365,7 @@ const Combat = {
     const counter = document.getElementById('coin-value');
     if (counter) {
       const cr = counter.getBoundingClientRect();
-      el.style.setProperty('--tx', (cr.left + cr.width / 2 - screenX) + 'px');
+      el.style.setProperty('--tx', (cr.left + cr.width  / 2 - screenX) + 'px');
       el.style.setProperty('--ty', (cr.top  + cr.height / 2 - screenY) + 'px');
     }
     document.body.appendChild(el);
@@ -294,9 +380,7 @@ const Combat = {
     this.floatingNums = this.floatingNums.filter(n => n.life > 0);
   },
 
-  // Dibujo completo; llamado por el game loop después de Visuals.render()
   render(ctx, W, H) {
-    // Flash de pantalla (daño recibido)
     if (this.screenFlashAlpha > 0) {
       ctx.save();
       ctx.globalAlpha = this.screenFlashAlpha;
@@ -305,7 +389,6 @@ const Combat = {
       ctx.restore();
     }
 
-    // Overlay rojo pulsante durante windup del jefe
     if (this.bossWindupActive) {
       ctx.save();
       ctx.globalAlpha = 0.08 + 0.05 * Math.sin(Date.now() / 80);
@@ -320,7 +403,6 @@ const Combat = {
       if (e.alive) this.renderEnemy(ctx, e);
     }
 
-    // Números flotantes de daño
     ctx.save();
     ctx.font = 'bold 13px "Space Mono", monospace';
     ctx.textAlign = 'center';
@@ -336,21 +418,52 @@ const Combat = {
     ctx.save();
     const flash = e.hitFlash > 0;
 
-    // Aura del jefe
+    // --- Minis: semitransparentes ---
+    if (e.isMini) {
+      ctx.globalAlpha = flash ? 0.9 : 0.65;
+      ctx.fillStyle   = flash ? '#ffffff' : e.color;
+      drawShape(ctx, e.x, e.y, e.radius, e.shape);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+
+    // --- Élite: aura pulsante ---
+    if (e.isElite) {
+      const pulse = 0.12 + 0.1 * Math.sin(Date.now() / 280);
+      ctx.globalAlpha = pulse;
+      ctx.fillStyle   = e.color;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, e.radius * 1.7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // --- Jefe: aura base + aura de carga ---
     if (e.isBoss) {
       ctx.globalAlpha = 0.20;
       ctx.fillStyle   = e.color;
       ctx.beginPath();
       ctx.arc(e.x, e.y, e.radius * 1.8, 0, Math.PI * 2);
       ctx.fill();
+
+      // Telegrafiar invocación: esfera blanca que crece rápidamente
+      if (e.chargeFlash > 0) {
+        const pulseSin = Math.sin(Date.now() / 55) * 0.5 + 0.5;
+        ctx.globalAlpha = e.chargeFlash * 0.45 * (0.4 + 0.6 * pulseSin);
+        ctx.fillStyle   = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, e.radius * (1.8 + e.chargeFlash * 1.4), 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
+    // --- Cuerpo principal ---
     ctx.globalAlpha = flash ? Math.min(1, 0.6 + e.hitFlash * 4) : 1;
     ctx.fillStyle   = flash ? '#ffffff' : e.color;
     drawShape(ctx, e.x, e.y, e.radius, e.shape);
     ctx.fill();
 
-    // Barra de vida (sólo si está dañado)
+    // --- Barra de vida (si está dañado) ---
     if (e.hp < e.maxHp) {
       const bw = e.radius * 2.6;
       const bx = e.x - bw / 2;
@@ -358,13 +471,13 @@ const Combat = {
       ctx.globalAlpha = 1;
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.fillRect(bx, by, bw, 3);
-      ctx.fillStyle = e.isBoss ? '#ff6644' : '#44ff88';
+      ctx.fillStyle = e.isBoss ? '#ff6644' : e.isElite ? '#ffaa44' : '#44ff88';
       ctx.fillRect(bx, by, bw * Math.max(0, e.hp / e.maxHp), 3);
     }
 
-    // Anillo de windup en el jefe (indica progreso del especial)
+    // --- Anillo de windup del jefe ---
     if (e.isBoss && this.bossWindupActive) {
-      const progress = 1 - this.bossWindupTimer;   // 0→1 durante 1s
+      const progress = 1 - this.bossWindupTimer;
       ctx.globalAlpha = 0.85;
       ctx.strokeStyle = '#ff4400';
       ctx.lineWidth   = 3;
@@ -372,23 +485,26 @@ const Combat = {
       ctx.arc(e.x, e.y, e.radius + 7, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
       ctx.stroke();
     }
+
     ctx.restore();
   },
 
   reset() {
-    this.mode      = 'peace';
-    this.enemies   = [];
-    this.floatingNums  = [];
-    this.peaceTimer    = this.PEACE_INITIAL;
+    this.mode         = 'peace';
+    this.enemies      = [];
+    this.floatingNums = [];
+    this.peaceTimer   = this.PEACE_INITIAL;
     this.bossWindupActive    = false;
     this.bossSpecialTimer    = 10;
     this.bossInterruptClicks = 0;
     this.screenFlashAlpha    = 0;
+    this.bossSummonTimer  = 15;
+    this.bossIsCharging   = false;
+    this.bossChargeTimer  = 0;
     Weapons.reset();
   },
 };
 
-// Dibuja formas geométricas para los enemigos
 function drawShape(ctx, x, y, r, shape) {
   ctx.beginPath();
   switch (shape) {

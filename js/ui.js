@@ -304,16 +304,29 @@ const UI = {
     this.showEraNotification('Debilitado −10% EPS', '¡Cuidado!');
   },
 
-  showDeathModal() {
+  showDeathModal({ newEraName = '—', genLosses = {} } = {}) {
+    // Construir lista de generadores perdidos con sus nombres legibles
+    const genNames = {};
+    for (const stage of STAGES) {
+      for (const gen of stage.generators) genNames[gen.id] = gen.name;
+    }
+    const lostEntries = Object.entries(genLosses).filter(([, n]) => n > 0);
+    const genListHtml = lostEntries.length
+      ? '<ul class="reset-list" style="margin-top:8px">'
+        + lostEntries.map(([id, n]) => `<li>${genNames[id] || id}: −${n}</li>`).join('')
+        + '</ul>'
+      : '<p class="dim" style="margin-top:6px">Sin generadores que perder.</p>';
+
     Modal.show({
-      title: '¡Derrotado!',
+      title: 'Perdiste el control',
       body: `
         <p class="modal-lead">Caíste dos veces en 5 minutos. El universo retrocedió.</p>
-        <ul class="reset-list">
-          <li>Perdiste una era</li>
-          <li>Tu energía se redujo a la mitad</li>
-        </ul>
-        <p class="dim">La siguiente era requiere derrotar un jefe. ¡Preparate!</p>
+        <dl class="kv">
+          <dt>Era reducida a</dt><dd class="hilite">${newEraName}</dd>
+          <dt>Energía</dt><dd>−50%</dd>
+          <dt>Generadores</dt><dd>−50% c/u</dd>
+        </dl>
+        ${genListHtml}
       `,
       buttons: [{ label: 'Continuar', primary: true }],
     });
